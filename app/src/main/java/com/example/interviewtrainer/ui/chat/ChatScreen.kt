@@ -1,6 +1,5 @@
 package com.example.interviewtrainer.ui.chat
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.interviewtrainer.data.model.ChatMessage
 import com.example.interviewtrainer.data.model.MessageRole
@@ -18,7 +16,8 @@ import com.example.interviewtrainer.viewmodel.InterviewViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    viewModel: InterviewViewModel
+    viewModel: InterviewViewModel,
+    onFinishInterview: () -> Unit
 ) {
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -26,7 +25,14 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Interviu în desfășurare") })
+            TopAppBar(
+                title = { Text("Interviu în desfășurare") },
+                actions = {
+                    TextButton(onClick = onFinishInterview) {
+                        Text("Încheie")
+                    }
+                }
+            )
         }
     ) { padding ->
         Column(
@@ -39,8 +45,7 @@ fun ChatScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                reverseLayout = false
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(messages) { message ->
                     MessageBubble(message = message)
@@ -48,11 +53,14 @@ fun ChatScreen(
 
                 if (isLoading) {
                     item {
-                        CircularProgressIndicator(
+                        Box(
                             modifier = Modifier
-                                .padding(16.dp)
-                                .align(Alignment.CenterHorizontally)
-                        )
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
                     }
                 }
             }
@@ -94,8 +102,7 @@ fun MessageBubble(message: ChatMessage) {
     val bgColor = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment
     ) {
         Card(

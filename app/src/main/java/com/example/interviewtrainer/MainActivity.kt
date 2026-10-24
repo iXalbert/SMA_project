@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.interviewtrainer.ui.chat.ChatScreen
+import com.example.interviewtrainer.ui.feedback.FeedbackScreen
 import com.example.interviewtrainer.ui.setup.SetupScreen
 import com.example.interviewtrainer.ui.theme.AIInterviewTrainerTheme
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
@@ -41,7 +42,24 @@ fun AppNavigation(viewModel: InterviewViewModel) {
             )
         }
         composable("chat") {
-            ChatScreen(viewModel = viewModel)
+            ChatScreen(
+                viewModel = viewModel,
+                onFinishInterview = {
+                    viewModel.finishInterview {
+                        navController.navigate("feedback")
+                    }
+                }
+            )
+        }
+        composable("feedback") {
+            FeedbackScreen(
+                viewModel = viewModel,
+                onRestart = {
+                    navController.navigate("setup") {
+                        popUpTo("setup") { inclusive = true }
+                    }
+                }
+            )
         }
     }
 }
