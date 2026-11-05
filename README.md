@@ -1,4 +1,4 @@
-# 🤖 AI Interview Trainer – Sistem Mobil Afectiv (SMA)
+# 🤖 AI Interview Trainer – Sisteme mobile si aplicatii (SMA)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Room%20DB-4285F4?style=for-the-badge&logo=sqlite&logoColor=white" alt="Room DB" />
 </p>
 
-> **Proiect de Semestru – Sistem Mobil Afectiv (SMA)**  
+> **Proiect de Semestru – Sisteme mobile si aplicatii (SMA)**  
 > **Autor**: Roșca Albert-Paul  
 > **Instituție**: Universitatea Politehnica Timișoara – Facultatea de Automatică și Calculatoare  
 > **Specializare**: Calculatoare (Anul III)  
@@ -29,7 +29,7 @@
 
 ## 🎯 Despre Proiect
 
-**AI Interview Trainer** este o aplicație mobilă nativă Android concepută ca un **Sistem Mobil Afectiv (SMA)**. Aplicația simulează un mediu interactiv și realist de interviu de angajare, pregătind candidații pentru întrebări tehnice și de cunoștințe generale pe o varietate mare de domenii profesionale.
+**AI Interview Trainer** este o aplicație mobilă nativă Android concepută ca un **Sisteme mobile si aplicatii (SMA)**. Aplicația simulează un mediu interactiv și realist de interviu de angajare, pregătind candidații pentru întrebări tehnice și de cunoștințe generale pe o varietate mare de domenii profesionale.
 
 Sistemul permite selecția facilă a profilului dorit, descarcă dinamic întrebări relevante din cloud, oferă asistență contextuală prin indicii în timp real (💡 **Hint**), evaluează răspunsurile prin algoritmi de potrivire a termenilor cheie (NLP Keyword Matching) și stochează progresul local în baza de date.
 
@@ -77,7 +77,7 @@ Aplicația respectă principiile **Clean Architecture** și modelul de proiectar
  │   QuestionApiService / JSON  │  │   InterviewDao / SQLite   │
  └──────────────────────────────┘  └───────────────────────────┘# 🤖 Mobile Affective System (SMA) – AI Interview Coach (Local LLM Edition)
 
-A native Android application built as a **Sistem Mobil Afectiv (SMA)**. It simulates realistic, domain-specific job interviews in real time using a **fully local LLM** (e.g., Ollama or on-device inference via MediaPipe LLM Inference / llama.cpp).
+A native Android application built as a **Sisteme mobile si aplicatii (SMA)**. It simulates realistic, domain-specific job interviews in real time using a **fully local LLM** (e.g., Ollama or on-device inference via MediaPipe LLM Inference / llama.cpp).
 
 The app includes advanced evaluation capabilities: instead of generating arbitrary feedback, it evaluates candidate answers against verifiable reference criteria and ground-truth answer specs, providing precise scoring, persistent progression tracking, and optional voice interaction.
 
@@ -153,7 +153,7 @@ The **SMA AI Interview Coach** provides a structured, multi-domain environment w
 
 ---
 ```markdown
-# 🤖 AI Interview Trainer – Sistem Mobil Afectiv (SMA)
+# 🤖 AI Interview Trainer – Sisteme mobile si aplicatii (SMA)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android" />
@@ -163,7 +163,7 @@ The **SMA AI Interview Coach** provides a structured, multi-domain environment w
   <img src="https://img.shields.io/badge/Room%20DB-4285F4?style=for-the-badge&logo=sqlite&logoColor=white" alt="Room DB" />
 </p>
 
-> **Proiect de Semestru – Sistem Mobil Afectiv (SMA)**  
+> **Proiect de Semestru – Sisteme mobile si aplicatii (SMA)**  
 > **Autor**: Roșca Albert-Paul  
 > **Instituție**: Universitatea Politehnica Timișoara – Facultatea de Automatică și Calculatoare  
 > **Specializare**: Calculatoare (Anul III)  
@@ -184,7 +184,7 @@ The **SMA AI Interview Coach** provides a structured, multi-domain environment w
 
 ## 🎯 Despre Proiect
 
-**AI Interview Trainer** este o aplicație mobilă nativă Android concepută ca un **Sistem Mobil Afectiv (SMA)**. Aplicația simulează un mediu interactiv și realist de interviu de angajare, pregătind candidații pentru întrebări tehnice și de cunoștințe generale pe o varietate mare de domenii profesionale.
+**AI Interview Trainer** este o aplicație mobilă nativă Android concepută ca un **Sisteme mobile si aplicatii (SMA)**. Aplicația simulează un mediu interactiv și realist de interviu de angajare, pregătind candidații pentru întrebări tehnice și de cunoștințe generale pe o varietate mare de domenii profesionale.
 
 Sistemul permite selecția facilă a profilului dorit, descarcă dinamic întrebări relevante din cloud, oferă asistență contextuală prin indicii în timp real (💡 **Hint**), evaluează răspunsurile prin algoritmi de potrivire a termenilor cheie (NLP Keyword Matching) și stochează progresul local în baza de date.
 
