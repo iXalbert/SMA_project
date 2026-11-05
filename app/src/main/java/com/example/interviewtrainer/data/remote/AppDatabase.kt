@@ -4,9 +4,14 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.example.interviewtrainer.data.model.BookmarkedQuestionEntity
 import com.example.interviewtrainer.data.model.InterviewEntity
 
-@Database(entities = [InterviewEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [InterviewEntity::class, BookmarkedQuestionEntity::class],
+    version = 3,
+    exportSchema = false
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun interviewDao(): InterviewDao
@@ -21,7 +26,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "interview_trainer_db"
-                ).build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

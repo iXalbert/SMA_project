@@ -1,8 +1,20 @@
 package com.example.interviewtrainer.data.model
 
+data class QuestionReview(
+    val questionId: Int,
+    val questionText: String,
+    val userResponse: String,
+    val referenceAnswer: String,
+    val matchedKeywords: List<String>,
+    val missedKeywords: List<String>,
+    val hintUsed: Boolean = false,
+    val interviewerTip: String? = null
+)
+
 data class InterviewReport(
-    val score: Int = 85,
-    val summary: String = "Ai demonstrat o bună înțelegere a conceptelor fundamentale.",
-    val strengths: List<String> = listOf("Comunicare clară", "Cunoștințe solide de arhitectură"),
-    val improvements: List<String> = listOf("Aprofundarea gestionării memoriei", "Exemple mai concrete din proiecte anterioare")
+    val score: Int,
+    val summary: String,
+    val strengths: List<String>,
+    val improvements: List<String>,
+    val reviews: List<QuestionReview> = emptyList()
 )

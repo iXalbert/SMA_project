@@ -77,7 +77,7 @@ class InterviewRepository {
         if (userMessages.isEmpty()) {
             return InterviewReport(
                 score = 0,
-                summary = if (isEn) "No user responses were recorded." else "Nu au fost înregistrate răspunsuri.",
+                summary = if (isEn) "No user responses recorded." else "Nu au fost înregistrate răspunsuri.",
                 strengths = emptyList(),
                 improvements = listOf(if (isEn) "Try answering the questions in detail." else "Răspunde mai detaliat la întrebări.")
             )
@@ -85,45 +85,66 @@ class InterviewRepository {
 
         var matchedKeywordsCount = 0
         var totalKeywords = 0
+        val questionReviews = mutableListOf<QuestionReview>()
 
         currentSessionQuestions.forEachIndexed { idx, question ->
-            val userAns = userMessages.getOrNull(idx)?.text?.lowercase() ?: ""
+            val userAns = userMessages.getOrNull(idx)?.text ?: ""
+            val userAnsLower = userAns.lowercase()
             val keywords = if (isEn) question.keywordsEn else question.keywordsRo
             totalKeywords += keywords.size
 
+            val matched = mutableListOf<String>()
+            val missed = mutableListOf<String>()
+
             keywords.forEach { kw ->
-                if (userAns.contains(kw.lowercase())) {
+                if (userAnsLower.contains(kw.lowercase())) {
+                    matched.add(kw)
                     matchedKeywordsCount++
+                } else {
+                    missed.add(kw)
                 }
             }
+
+            questionReviews.add(
+                QuestionReview(
+                    questionId = question.id,
+                    questionText = if (isEn) question.questionEn else question.questionRo,
+                    userResponse = if (userAns.isBlank()) (if (isEn) "No answer provided" else "Fără răspuns") else userAns,
+                    referenceAnswer = if (isEn) question.referenceAnswerEn else question.referenceAnswerRo,
+                    matchedKeywords = matched,
+                    missedKeywords = missed,
+                    interviewerTip = if (isEn) question.interviewerTipEn else question.interviewerTipRo
+                )
+            )
         }
 
         val calculatedScore = if (totalKeywords > 0) {
-            ((matchedKeywordsCount.toDouble() / totalKeywords) * 100).toInt().coerceIn(20, 95)
+            ((matchedKeywordsCount.toDouble() / totalKeywords) * 100).toInt().coerceIn(20, 98)
         } else 50
 
         val summaryText = when {
-            calculatedScore >= 80 -> if (isEn) "Excellent technical knowledge!" else "Cunoștințe tehnice excelente!"
-            calculatedScore >= 50 -> if (isEn) "Good overall response, but needs more depth." else "Răspunsuri bune, dar este loc de mai multe detalii tehnice."
-            else -> if (isEn) "Basic understanding. Review fundamental concepts." else "Necesită mai multă pregătire pe concepte fundamentale."
+            calculatedScore >= 80 -> if (isEn) "Excellent technical proficiency!" else "Cunoștințe tehnice excelente!"
+            calculatedScore >= 50 -> if (isEn) "Solid understanding, room for specific details." else "Răspunsuri bune, dar este loc de mai multe detalii tehnice."
+            else -> if (isEn) "Needs further preparation on core concepts." else "Necesită mai multă pregătire pe concepte fundamentale."
         }
 
         val strengths = mutableListOf<String>()
         val improvements = mutableListOf<String>()
 
         if (calculatedScore >= 70) {
-            strengths.add(if (isEn) "Clear understanding of key terminology" else "Înțelegere clară a terminologiei cheie")
-            strengths.add(if (isEn) "Structured and direct answers" else "Răspunsuri structurate și la obiect")
+            strengths.add(if (isEn) "Used correct domain terminology" else "A folosit terminologie corectă de domeniu")
+            strengths.add(if (isEn) "Addressed key technical requirements" else "A atins cerințele tehnice principale")
         } else {
-            improvements.add(if (isEn) "Include more specific technical terms" else "Folosește mai mulți termeni tehnici specifici")
-            improvements.add(if (isEn) "Elaborate more on practical scenarios" else "Detaliază mai mult exemplele practice")
+            improvements.add(if (isEn) "Include missing keywords shown in review" else "Include cuvintele cheie omise evidențiate în raport")
+            improvements.add(if (isEn) "Elaborate more on practical mechanisms" else "Detaliază mai mult mecanismele practice")
         }
 
         return InterviewReport(
             score = calculatedScore,
             summary = summaryText,
             strengths = strengths,
-            improvements = improvements
+            improvements = improvements,
+            reviews = questionReviews
         )
     }
 }

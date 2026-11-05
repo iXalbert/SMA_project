@@ -28,5 +28,7 @@ data class QuestionDto(
     val keywordsRo: List<String>,
     val keywordsEn: List<String>,
     val hintRo: String,
-    val hintEn: String
+    val hintEn: String,
+    val interviewerTipRo: String? = null,
+    val interviewerTipEn: String? = null
 )

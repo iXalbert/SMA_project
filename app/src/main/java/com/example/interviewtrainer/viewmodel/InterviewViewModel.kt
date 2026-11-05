@@ -18,6 +18,17 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
     val repository = InterviewRepository()
     private val dao = AppDatabase.getDatabase(application).interviewDao()
 
+    // 1. Starea Temei Grafice (Dark / Light)
+    private val _isDarkMode = MutableStateFlow(false)
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    fun toggleDarkMode() {
+        _isDarkMode.value = !_isDarkMode.value
+    }
+
+    // 2. Favorite (Bookmarks)
+    val bookmarkedQuestions: StateFlow<List<BookmarkedQuestionEntity>> = MutableStateFlow(emptyList())
+
     val savedInterviews: StateFlow<List<InterviewEntity>> = MutableStateFlow(emptyList())
 
     private val _config = MutableStateFlow(InterviewConfig())
@@ -36,6 +47,35 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             dao.getAllInterviews().collect { list ->
                 (savedInterviews as MutableStateFlow).value = list
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.getAllBookmarks().collect { list ->
+                (bookmarkedQuestions as MutableStateFlow).value = list
+            }
+        }
+    }
+
+    fun toggleBookmark(question: QuestionDto) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val exists = dao.isBookmarked(question.id)
+            if (exists) {
+                dao.deleteBookmark(question.id)
+            } else {
+                dao.insertBookmark(
+                    BookmarkedQuestionEntity(
+                        questionId = question.id,
+                        domain = _config.value.domain,
+                        specialization = _config.value.specialization,
+                        role = _config.value.role,
+                        questionRo = question.questionRo,
+                        questionEn = question.questionEn,
+                        referenceAnswerRo = question.referenceAnswerRo,
+                        referenceAnswerEn = question.referenceAnswerEn,
+                        hintRo = question.hintRo,
+                        hintEn = question.hintEn
+                    )
+                )
             }
         }
     }

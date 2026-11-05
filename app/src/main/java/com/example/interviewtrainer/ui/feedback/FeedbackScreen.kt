@@ -7,23 +7,34 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.interviewtrainer.data.model.QuestionReview
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedbackScreen(
     viewModel: InterviewViewModel,
-    onRestart: () -> Unit
+    onBackToSetup: () -> Unit
 ) {
     val report by viewModel.report.collectAsState()
+    val isEn = viewModel.config.collectAsState().value.language == "Engleză"
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Raport Final Interviu") })
+            TopAppBar(
+                title = { Text(if (isEn) "Interview Report" else "Raport Evaluare Interviu", fontWeight = FontWeight.Bold) }
+            )
         }
     ) { padding ->
-        report?.let { rep ->
+        val currentReport = report
+        if (currentReport == null) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -33,52 +44,137 @@ fun FeedbackScreen(
             ) {
                 item {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        colors = CardDefaults.cardColors(
+                            containerColor = when {
+                                currentReport.score >= 80 -> Color(0xFFE8F5E9)
+                                currentReport.score >= 50 -> Color(0xFFFFF3E0)
+                                else -> Color(0xFFFFEBEE)
+                            }
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Scor Obținut: ${rep.score} / 100",
-                                style = MaterialTheme.typography.headlineMedium
+                                text = "${currentReport.score}%",
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    currentReport.score >= 80 -> Color(0xFF2E7D32)
+                                    currentReport.score >= 50 -> Color(0xFFE65100)
+                                    else -> Color(0xFFC62828)
+                                }
                             )
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text(text = rep.summary, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = currentReport.summary,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                 }
 
-                item {
-                    Text(text = "Puncte Tare:", style = MaterialTheme.typography.titleLarge)
-                }
-                items(rep.strengths) { strength ->
-                    Text(text = "• $strength", style = MaterialTheme.typography.bodyMedium)
+                if (currentReport.reviews.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = if (isEn) "Detailed Question Analysis" else "Analiză Detaliată per Întrebare",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    items(currentReport.reviews) { review ->
+                        QuestionReviewCard(review = review, isEn = isEn)
+                    }
                 }
 
                 item {
-                    Text(text = "Aspecte de Îmbunătățit:", style = MaterialTheme.typography.titleLarge)
-                }
-                items(rep.improvements) { imp ->
-                    Text(text = "• $imp", style = MaterialTheme.typography.bodyMedium)
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
                     Button(
-                        onClick = onRestart,
-                        modifier = Modifier.fillMaxWidth()
+                        onClick = onBackToSetup,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
                     ) {
-                        Text("Începe un nou interviu")
+                        Text(if (isEn) "Start New Session" else "Interviu Nou")
                     }
                 }
             }
-        } ?: Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        }
+    }
+}
+
+@Composable
+fun QuestionReviewCard(review: QuestionReview, isEn: Boolean) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CircularProgressIndicator()
+            Text(
+                text = review.questionText,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+            HorizontalDivider()
+
+            Text(
+                text = "${if (isEn) "Your Answer: " else "Răspunsul Tău: "}${review.userResponse}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            Text(
+                text = "${if (isEn) "Ideal Reference Answer: " else "Răspuns Ideal: "}${review.referenceAnswer}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            if (review.matchedKeywords.isNotEmpty()) {
+                Text(
+                    text = "${if (isEn) "Keywords hit: " else "Cuvinte cheie atinse: "}${review.matchedKeywords.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF2E7D32),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            if (review.missedKeywords.isNotEmpty()) {
+                Text(
+                    text = "${if (isEn) "Keywords missed: " else "Cuvinte cheie omise: "}${review.missedKeywords.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFC62828),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            // Card distinct pentru sfaturile din CtCI / TensorFlow
+            if (!review.interviewerTip.isNullOrBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Text(
+                            text = if (isEn) "💡 Interviewer Criteria & Tips (CtCI):" else "💡 La ce se uită intervievatorul (CtCI):",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = review.interviewerTip,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                    }
+                }
+            }
         }
     }
 }

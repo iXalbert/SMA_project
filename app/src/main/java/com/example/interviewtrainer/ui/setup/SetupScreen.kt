@@ -1,6 +1,9 @@
 package com.example.interviewtrainer.ui.setup
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,9 +20,9 @@ fun SetupScreen(
     onStartInterview: () -> Unit,
     onOpenHistory: () -> Unit
 ) {
-    // Înlocuiește cu URL-ul tău RAW din GitHub Gist
     val rawGistUrl = "https://gist.githubusercontent.com/iXalbert/d6f75eebf201f1efa3b108e514c74061/raw/questions.json"
 
+    val isDarkMode by viewModel.isDarkMode.collectAsState()
     var questionBank by remember { mutableStateOf<QuestionBankResponse?>(null) }
     var isLoadingBank by remember { mutableStateOf(true) }
 
@@ -56,7 +59,18 @@ fun SetupScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Configurare Interviu (SMA)", fontWeight = FontWeight.Bold) })
+            TopAppBar(
+                title = { Text("Configurare Interviu (SMA)", fontWeight = FontWeight.Bold) },
+                actions = {
+                    // 🌙 / ☀️ Butonul de Schimbare Tema
+                    IconButton(onClick = { viewModel.toggleDarkMode() }) {
+                        Icon(
+                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = "Comută Tema Dark/Light"
+                        )
+                    }
+                }
+            )
         }
     ) { padding ->
         if (isLoadingBank) {
