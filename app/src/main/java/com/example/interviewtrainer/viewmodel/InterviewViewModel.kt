@@ -160,4 +160,25 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+
+    // CRUD: CREATE
+    fun addInterviewRecord(interview: InterviewEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertInterview(interview)
+        }
+    }
+
+    // CRUD: UPDATE
+    fun updateInterviewRecord(interview: InterviewEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateInterview(interview)
+        }
+    }
+
+    // CRUD: DELETE
+    fun deleteInterviewRecord(interview: InterviewEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteInterview(interview)
+        }
+    }
 }

@@ -55,8 +55,8 @@ class InterviewRepository {
         return if (questionIndex < currentSessionQuestions.size) {
             val qNext = currentSessionQuestions[questionIndex]
             val qText = if (isEn) qNext.questionEn else qNext.questionRo
-            val text = if (isEn) "Thank you.\n\nQuestion #${questionIndex + 1}: $qText"
-            else "Am înregistrat răspunsul tău.\n\nÎntrebarea #${questionIndex + 1}: $qText"
+            val text = if (isEn) "Thank you.\n\nQuestion #${questionIndex + 1}:$qText"
+            else "Am înregistrat răspunsul tău.\n\nÎntrebarea #${questionIndex + 1}:$qText"
             Pair(text, qNext)
         } else {
             val text = if (isEn) "You have completed all questions! Click 'Finish' to view your report."

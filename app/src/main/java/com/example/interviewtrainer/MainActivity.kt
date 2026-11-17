@@ -80,6 +80,9 @@ fun AppNavigation(viewModel: InterviewViewModel) {
             val savedInterviews by viewModel.savedInterviews.collectAsState()
             HistoryScreen(
                 interviews = savedInterviews,
+                onAddInterview = { viewModel.addInterviewRecord(it) },
+                onUpdateInterview = { viewModel.updateInterviewRecord(it) },
+                onDeleteInterview = { viewModel.deleteInterviewRecord(it) },
                 onBack = {
                     navController.popBackStack()
                 }
