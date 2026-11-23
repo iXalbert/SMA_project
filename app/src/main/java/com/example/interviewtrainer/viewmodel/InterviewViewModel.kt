@@ -31,6 +31,8 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
 
     val savedInterviews: StateFlow<List<InterviewEntity>> = MutableStateFlow(emptyList())
 
+    val customQuestions: StateFlow<List<CustomQuestionEntity>> = MutableStateFlow(emptyList())
+
     private val _config = MutableStateFlow(InterviewConfig())
     val config: StateFlow<InterviewConfig> = _config.asStateFlow()
 
@@ -52,6 +54,12 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch(Dispatchers.IO) {
             dao.getAllBookmarks().collect { list ->
                 (bookmarkedQuestions as MutableStateFlow).value = list
+            }
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.getAllCustomQuestions().collect { list ->
+                (customQuestions as MutableStateFlow).value = list
             }
         }
     }
@@ -101,12 +109,31 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
             _isLoading.value = true
             _messages.value = emptyList()
 
-            val (firstText, qData) = repository.startInterview(_config.value, rawGistUrl)
+            val customForRole = dao.getCustomQuestionsByRole(_config.value.role).map { it.toQuestionDto() }
+            val (firstText, qData) = repository.startInterview(_config.value, rawGistUrl, customForRole)
 
             _messages.value = listOf(
                 ChatMessage(text = firstText, role = MessageRole.INTERVIEWER, questionData = qData)
             )
             _isLoading.value = false
+        }
+    }
+
+    fun addCustomQuestion(question: CustomQuestionEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.insertCustomQuestion(question)
+        }
+    }
+
+    fun updateCustomQuestion(question: CustomQuestionEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.updateCustomQuestion(question)
+        }
+    }
+
+    fun deleteCustomQuestion(question: CustomQuestionEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteCustomQuestion(question)
         }
     }
 
@@ -179,6 +206,15 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
     fun deleteInterviewRecord(interview: InterviewEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             dao.deleteInterview(interview)
+        }
+    }
+
+    fun updateUserMessage(index: Int, newText: String) {
+        if (newText.isBlank()) return
+        val currentList = _messages.value.toMutableList()
+        if (index in currentList.indices && currentList[index].role == MessageRole.USER) {
+            currentList[index] = currentList[index].copy(text = newText.trim())
+            _messages.value = currentList
         }
     }
 }

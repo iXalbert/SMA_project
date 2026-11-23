@@ -19,7 +19,11 @@ class InterviewRepository {
         return cachedQuestionBank!!
     }
 
-    suspend fun startInterview(config: InterviewConfig, rawGistUrl: String): Pair<String, QuestionDto?> {
+    suspend fun startInterview(
+        config: InterviewConfig,
+        rawGistUrl: String,
+        customQuestions: List<QuestionDto> = emptyList()
+    ): Pair<String, QuestionDto?> {
         delay(400)
         val bank = fetchQuestionBank(rawGistUrl)
 
@@ -27,9 +31,10 @@ class InterviewRepository {
         val spec = domain?.specializations?.find { it.name == config.specialization }
         val role = spec?.roles?.find { it.title == config.role }
 
-        val allQuestions = role?.questions ?: emptyList()
+        val remoteQuestions = role?.questions ?: emptyList()
+        val allQuestions = customQuestions + remoteQuestions
 
-        currentSessionQuestions = allQuestions.shuffled().take(config.questionLimit)
+        currentSessionQuestions = (customQuestions + remoteQuestions.shuffled()).take(config.questionLimit)
         questionIndex = 0
 
         return if (currentSessionQuestions.isNotEmpty()) {

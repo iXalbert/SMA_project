@@ -5,11 +5,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.interviewtrainer.data.model.BookmarkedQuestionEntity
+import com.example.interviewtrainer.data.model.CustomQuestionEntity
 import com.example.interviewtrainer.data.model.InterviewEntity
 
 @Database(
-    entities = [InterviewEntity::class, BookmarkedQuestionEntity::class],
-    version = 3,
+    entities = [InterviewEntity::class, BookmarkedQuestionEntity::class, CustomQuestionEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

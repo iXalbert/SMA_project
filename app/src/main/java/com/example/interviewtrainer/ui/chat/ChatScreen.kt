@@ -8,10 +8,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
@@ -40,12 +41,13 @@ fun ChatScreen(
     val isEn = config.language == "Engleză"
 
     var userText by remember { mutableStateOf("") }
+    var editingMessageIndex by remember { mutableStateOf<Int?>(null) }
+    var editingMessageText by remember { mutableStateOf("") }
 
     val voiceHelper = remember {
         VoiceHelper(context) {}
     }
 
-    // Launcher recunoaștere vocală cu fallback pentru Emulator
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -64,7 +66,6 @@ fun ChatScreen(
         }
     }
 
-    // Citire prin TTS a întrebării intervievatorului (Text-To-Speech funcționează și pe emulator!)
     LaunchedEffect(messages.size) {
         val lastMsg = messages.lastOrNull()
         if (lastMsg != null && lastMsg.role == MessageRole.INTERVIEWER) {
@@ -98,14 +99,24 @@ fun ChatScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(messages) { message ->
-                    ChatBubble(message = message)
+                itemsIndexed(messages) { index, message ->
+                    ChatBubble(
+                        message = message,
+                        onEditUserMessage = if (message.role == MessageRole.USER) {
+                            {
+                                editingMessageIndex = index
+                                editingMessageText = message.text
+                            }
+                        } else null
+                    )
                 }
 
                 if (isLoading) {
                     item {
                         Box(
-                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp))
@@ -126,7 +137,6 @@ fun ChatScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // 💡 Hint
                     IconButton(
                         onClick = { viewModel.requestHint() },
                         enabled = !isLoading,
@@ -138,18 +148,16 @@ fun ChatScreen(
                         Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu")
                     }
 
-                    // 🎙️ Microfon (Încearcă STT nativ, iar dacă e emulator fără serviciu vocal, simulează dictarea)
                     IconButton(
                         onClick = {
                             try {
                                 val intent = voiceHelper.createSpeechIntent(config.language)
                                 speechLauncher.launch(intent)
                             } catch (e: ActivityNotFoundException) {
-                                // Fallback pentru emulator fără servicii vocale
                                 val simulatedText = if (isEn)
-                                    "I would use a HashMap with O(1) time complexity and a bit vector for memory optimization."
+                                    "I would use a HashMap with O(1) time complexity."
                                 else
-                                    "Aș folosi un HashMap cu complexitate O(1) și un bit vector pentru optimizarea memoriei."
+                                    "Aș folosi un HashMap cu complexitate O(1)."
 
                                 userText = if (userText.isBlank()) simulatedText else "$userText $simulatedText"
                                 Toast.makeText(context, "Simulare dictare vocală (Emulator Mode)", Toast.LENGTH_SHORT).show()
@@ -173,7 +181,6 @@ fun ChatScreen(
                         maxLines = 3
                     )
 
-                    // Send
                     IconButton(
                         onClick = {
                             viewModel.sendMessage(userText)
@@ -186,18 +193,51 @@ fun ChatScreen(
                 }
             }
         }
+
+        // Dialog UPDATE pentru corectarea transcrierii vocale (ex. "O de 1" -> "O(1)")
+        if (editingMessageIndex != null) {
+            AlertDialog(
+                onDismissRequest = { editingMessageIndex = null },
+                title = { Text(if (isEn) "Edit Transcribed Answer" else "Corectează răspunsul") },
+                text = {
+                    OutlinedTextField(
+                        value = editingMessageText,
+                        onValueChange = { editingMessageText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 5
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            editingMessageIndex?.let { idx ->
+                                viewModel.updateUserMessage(idx, editingMessageText)
+                            }
+                            editingMessageIndex = null
+                        }
+                    ) {
+                        Text(if (isEn) "Save" else "Salvează")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { editingMessageIndex = null }) {
+                        Text(if (isEn) "Cancel" else "Anulează")
+                    }
+                }
+            )
+        }
     }
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(
+    message: ChatMessage,
+    onEditUserMessage: (() -> Unit)? = null
+) {
     val isUser = message.role == MessageRole.USER
     val isHint = message.role == MessageRole.HINT
 
-    val alignment = when {
-        isUser -> Alignment.CenterEnd
-        else -> Alignment.CenterStart
-    }
+    val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
 
     val containerColor = when {
         isUser -> MaterialTheme.colorScheme.primaryContainer
@@ -218,14 +258,34 @@ fun ChatBubble(message: ChatMessage) {
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = containerColor,
-            modifier = Modifier.widthIn(max = 280.dp)
+            modifier = Modifier.widthIn(max = 290.dp)
         ) {
-            Text(
-                text = message.text,
-                color = textColor,
-                modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = message.text,
+                    color = textColor,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (isUser && onEditUserMessage != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        IconButton(
+                            onClick = onEditUserMessage,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Editează răspunsul",
+                                tint = textColor.copy(alpha = 0.75f),
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
