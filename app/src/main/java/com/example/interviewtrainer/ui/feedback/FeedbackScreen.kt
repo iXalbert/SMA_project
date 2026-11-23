@@ -1,14 +1,26 @@
 package com.example.interviewtrainer.ui.feedback
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.interviewtrainer.data.model.QuestionReview
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
@@ -22,56 +34,91 @@ fun FeedbackScreen(
     val report by viewModel.report.collectAsState()
     val isEn = viewModel.config.collectAsState().value.language == "Engleză"
 
+    var selectedReviewPair by remember { mutableStateOf<Pair<Int, QuestionReview>?>(null) }
+
+    selectedReviewPair?.let { (index, review) ->
+        BackHandler { selectedReviewPair = null }
+        QuestionDetailScreen(
+            questionNumber = index + 1,
+            review = review,
+            isEn = isEn,
+            onBack = { selectedReviewPair = null }
+        )
+        return
+    }
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(if (isEn) "Interview Report" else "Raport Evaluare Interviu", fontWeight = FontWeight.Bold) }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
+                title = {
+                    Text(
+                        text = if (isEn) "Interview Report" else "Raport Evaluare",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             )
         }
     ) { padding ->
         val currentReport = report
         if (currentReport == null) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 CircularProgressIndicator()
             }
         } else {
+            val scoreColor = when {
+                currentReport.score >= 80 -> Color(0xFF16A34A)
+                currentReport.score >= 50 -> Color(0xFFD97706)
+                else -> Color(0xFFDC2626)
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = when {
-                                currentReport.score >= 80 -> Color(0xFFE8F5E9)
-                                currentReport.score >= 50 -> Color(0xFFFFF3E0)
-                                else -> Color(0xFFFFEBEE)
-                            }
-                        ),
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
+                                text = if (isEn) "OVERALL SCORE" else "SCOR GENERAL",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
                                 text = "${currentReport.score}%",
-                                style = MaterialTheme.typography.displayMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = when {
-                                    currentReport.score >= 80 -> Color(0xFF2E7D32)
-                                    currentReport.score >= 50 -> Color(0xFFE65100)
-                                    else -> Color(0xFFC62828)
-                                }
+                                style = MaterialTheme.typography.displayLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = scoreColor
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = currentReport.summary,
                                 style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -79,26 +126,45 @@ fun FeedbackScreen(
 
                 if (currentReport.reviews.isNotEmpty()) {
                     item {
-                        Text(
-                            text = if (isEn) "Detailed Question Analysis" else "Analiză Detaliată per Întrebare",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(modifier = Modifier.padding(top = 4.dp)) {
+                            Text(
+                                text = if (isEn) "Questions & Answers" else "Întrebări și Răspunsuri",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isEn) "Tap a question to inspect keywords & ideal answer"
+                                else "Apasă pe o întrebare pentru cuvinte cheie și răspunsul ideal",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
-                    items(currentReport.reviews) { review ->
-                        QuestionReviewCard(review = review, isEn = isEn)
+                    itemsIndexed(currentReport.reviews) { index, review ->
+                        CompactQuestionCard(
+                            questionNumber = index + 1,
+                            review = review,
+                            isEn = isEn,
+                            onClick = { selectedReviewPair = index to review }
+                        )
                     }
                 }
 
                 item {
                     Button(
                         onClick = onBackToSetup,
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 8.dp)
+                            .height(52.dp)
                     ) {
-                        Text(if (isEn) "Start New Session" else "Interviu Nou")
+                        Text(
+                            text = if (isEn) "Start New Session" else "Interviu Nou",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -107,69 +173,271 @@ fun FeedbackScreen(
 }
 
 @Composable
-fun QuestionReviewCard(review: QuestionReview, isEn: Boolean) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(2.dp)
+fun CompactQuestionCard(
+    questionNumber: Int,
+    review: QuestionReview,
+    isEn: Boolean,
+    onClick: () -> Unit
+) {
+    val totalKeywords = review.matchedKeywords.size + review.missedKeywords.size
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = review.questionText,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-            HorizontalDivider()
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Question #$questionNumber" else "Întrebarea #$questionNumber",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (totalKeywords > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "${review.matchedKeywords.size}/$totalKeywords ${if (isEn) "keywords" else "cuvinte cheie"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
 
-            Text(
-                text = "${if (isEn) "Your Answer: " else "Răspunsul Tău: "}${review.userResponse}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Text(
-                text = "${if (isEn) "Ideal Reference Answer: " else "Răspuns Ideal: "}${review.referenceAnswer}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-
-            if (review.matchedKeywords.isNotEmpty()) {
                 Text(
-                    text = "${if (isEn) "Keywords hit: " else "Cuvinte cheie atinse: "}${review.matchedKeywords.joinToString(", ")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF2E7D32),
+                    text = review.questionText,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
+                )
+
+                Text(
+                    text = "${if (isEn) "Your answer: " else "Răspunsul tău: "}${review.userResponse}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            if (review.missedKeywords.isNotEmpty()) {
-                Text(
-                    text = "${if (isEn) "Keywords missed: " else "Cuvinte cheie omise: "}${review.missedKeywords.joinToString(", ")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFC62828),
-                    fontWeight = FontWeight.SemiBold
-                )
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Vezi detalii",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun QuestionDetailScreen(
+    questionNumber: Int,
+    review: QuestionReview,
+    isEn: Boolean,
+    onBack: () -> Unit
+) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
+                title = {
+                    Text(
+                        text = if (isEn) "Question #$questionNumber Analysis" else "Detalii Întrebarea #$questionNumber",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = if (isEn) "Back" else "Înapoi"
+                        )
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (isEn) "QUESTION" else "ÎNTREBARE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = review.questionText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
 
-            // Card distinct pentru sfaturile din CtCI / TensorFlow
-            if (!review.interviewerTip.isNullOrBlank()) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (isEn) "YOUR ANSWER" else "RĂSPUNSUL TĂU",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = review.userResponse,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (review.matchedKeywords.isNotEmpty() || review.missedKeywords.isNotEmpty()) {
                 Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = MaterialTheme.shapes.small,
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Text(
-                            text = if (isEn) "💡 Interviewer Criteria & Tips (CtCI):" else "💡 La ce se uită intervievatorul (CtCI):",
-                            style = MaterialTheme.typography.labelMedium,
+                            text = if (isEn) "KEYWORDS EVALUATION" else "EVALUARE CUVINTE CHEIE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold
+                        )
+
+                        if (review.matchedKeywords.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                review.matchedKeywords.forEach { kw ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFDCFCE7)
+                                    ) {
+                                        Text(
+                                            text = "✓ $kw",
+                                            color = Color(0xFF166534),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        if (review.missedKeywords.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                review.missedKeywords.forEach { kw ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFFEE2E2)
+                                    ) {
+                                        Text(
+                                            text = "✕ $kw",
+                                            color = Color(0xFF991B1B),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (isEn) "IDEAL REFERENCE ANSWER" else "RĂSPUNS IDEAL DE REFERINȚĂ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = review.referenceAnswer,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            if (!review.interviewerTip.isNullOrBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = if (isEn) "💡 INTERVIEWER CRITERIA" else "💡 LA CE SE UITĂ INTERVIEVATORUL",
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = review.interviewerTip,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                     }

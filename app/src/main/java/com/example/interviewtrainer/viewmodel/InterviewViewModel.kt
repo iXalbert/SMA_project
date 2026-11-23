@@ -177,7 +177,8 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
                     role = _config.value.role,
                     level = _config.value.experienceLevel,
                     score = generatedReport.score,
-                    summary = generatedReport.summary
+                    summary = generatedReport.summary,
+                    detailsJson = generatedReport.reviews.toDetailsJson()
                 )
             )
 

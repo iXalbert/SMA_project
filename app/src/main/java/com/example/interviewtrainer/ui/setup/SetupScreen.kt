@@ -1,54 +1,29 @@
 package com.example.interviewtrainer.ui.setup
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.interviewtrainer.data.model.CustomQuestionEntity
 import com.example.interviewtrainer.data.model.QuestionBankResponse
@@ -65,6 +40,7 @@ fun SetupScreen(
 
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val customQuestions by viewModel.customQuestions.collectAsState()
+    val savedInterviews by viewModel.savedInterviews.collectAsState()
     var questionBank by remember { mutableStateOf<QuestionBankResponse?>(null) }
     var isLoadingBank by remember { mutableStateOf(true) }
 
@@ -104,15 +80,39 @@ fun SetupScreen(
     var selectedLanguage by remember { mutableStateOf(languages.first()) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("Configurare Interviu (SMA)", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = { viewModel.toggleDarkMode() }) {
-                        Icon(
-                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = "Comută Tema Dark/Light"
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background
+                ),
+                title = {
+                    Column {
+                        Text(
+                            text = "Interview Trainer",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
                         )
+                        Text(
+                            text = "Simulator AI & Pregătire Tehnică",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                actions = {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        IconButton(onClick = { viewModel.toggleDarkMode() }) {
+                            Icon(
+                                imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = "Comută Tema",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
             )
@@ -126,9 +126,13 @@ fun SetupScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Se încarcă banca de întrebări din cloud...")
+                    Text(
+                        text = "Se sincronizează banca de întrebări...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         } else {
@@ -136,52 +140,109 @@ fun SetupScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Alege parametrii interviului",
-                    style = MaterialTheme.typography.titleMedium
-                )
+                // Card 1: Poziția vizată
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "1. Poziția vizată",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
 
-                DropdownSelector(
-                    label = "Domeniu",
-                    options = domains,
-                    selectedOption = selectedDomain,
-                    onOptionSelected = { selectedDomain = it }
-                )
+                        DropdownSelector(
+                            label = "Domeniu",
+                            options = domains,
+                            selectedOption = selectedDomain,
+                            onOptionSelected = { selectedDomain = it }
+                        )
 
-                DropdownSelector(
-                    label = "Specializare",
-                    options = specializations,
-                    selectedOption = selectedSpecialization,
-                    onOptionSelected = { selectedSpecialization = it }
-                )
+                        DropdownSelector(
+                            label = "Specializare",
+                            options = specializations,
+                            selectedOption = selectedSpecialization,
+                            onOptionSelected = { selectedSpecialization = it }
+                        )
 
-                DropdownSelector(
-                    label = "Rol / Poziție",
-                    options = roles,
-                    selectedOption = selectedRole,
-                    onOptionSelected = { selectedRole = it }
-                )
+                        DropdownSelector(
+                            label = "Rol / Poziție",
+                            options = roles,
+                            selectedOption = selectedRole,
+                            onOptionSelected = { selectedRole = it }
+                        )
+                    }
+                }
 
-                DropdownSelector(
-                    label = "Nivel de experiență",
-                    options = levels,
-                    selectedOption = selectedLevel,
-                    onOptionSelected = { selectedLevel = it }
-                )
+                // Card 2: Nivel și Limbă (Pill Selectors moderne)
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Text(
+                            text = "2. Parametri sesiune",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
 
-                DropdownSelector(
-                    label = "Limbă",
-                    options = languages,
-                    selectedOption = selectedLanguage,
-                    onOptionSelected = { selectedLanguage = it }
-                )
+                        PillSelectorGroup(
+                            label = "Nivel de experiență",
+                            options = levels,
+                            selectedOption = selectedLevel,
+                            onOptionSelected = { selectedLevel = it }
+                        )
 
-                Spacer(modifier = Modifier.weight(1f))
+                        PillSelectorGroup(
+                            label = "Limba interviului",
+                            options = languages,
+                            selectedOption = selectedLanguage,
+                            onOptionSelected = { selectedLanguage = it }
+                        )
+                    }
+                }
 
+                // Carduri rapide pentru Banca Personală și Istoric
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    QuickActionCard(
+                        title = "Întrebările Mele",
+                        subtitle = "${customQuestions.size} salvate",
+                        icon = Icons.Default.Quiz,
+                        onClick = { showCustomBankSheet = true },
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickActionCard(
+                        title = "Istoric",
+                        subtitle = "${savedInterviews.size} sesiuni",
+                        icon = Icons.Default.History,
+                        onClick = onOpenHistory,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Buton principal CTA
                 Button(
                     onClick = {
                         viewModel.updateConfig(
@@ -194,32 +255,24 @@ fun SetupScreen(
                         viewModel.startInterview(rawGistUrl)
                         onStartInterview()
                     },
+                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
+                        .height(54.dp),
                     enabled = selectedRole.isNotBlank()
                 ) {
-                    Text("Începe Interviul")
-                }
-
-                // Buton Banca Personală de Întrebări (CRUD Custom Questions)
-                FilledTonalButton(
-                    onClick = { showCustomBankSheet = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Banca Mea de Întrebări (${customQuestions.size})")
-                }
-
-                OutlinedButton(
-                    onClick = onOpenHistory,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Vezi Istoric Interviuri Salvate")
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Începe Interviul",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
 
-        // Dialog listă întrebări proprii (Read / Create / Update / Delete)
+        // Dialog listă întrebări proprii (CRUD Custom Questions)
         if (showCustomBankSheet) {
             AlertDialog(
                 onDismissRequest = { showCustomBankSheet = false },
@@ -229,28 +282,51 @@ fun SetupScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Întrebările Mele", style = MaterialTheme.typography.titleLarge)
-                        IconButton(onClick = { showCreateQuestionDialog = true }) {
+                        Text("Întrebările Mele", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        FilledTonalIconButton(onClick = { showCreateQuestionDialog = true }) {
                             Icon(Icons.Default.Add, contentDescription = "Adaugă Întrebare")
                         }
                     }
                 },
                 text = {
                     if (customQuestions.isEmpty()) {
-                        Text("Nu ai adăugat încă întrebări proprii. Apasă + pentru a crea una pentru rolul $selectedRole.")
+                        Text(
+                            text = "Nu ai adăugat încă întrebări proprii. Apasă + pentru a crea una pentru rolul $selectedRole.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     } else {
                         LazyColumn(
-                            modifier = Modifier.heightIn(max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.heightIn(max = 340.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             items(customQuestions, key = { it.id }) { q ->
-                                Card(
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                                 ) {
-                                    Column(modifier = Modifier.padding(10.dp)) {
-                                        Text(q.role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                        Text(q.questionText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                        Text("Cuvinte cheie: ${q.keywordsCsv}", style = MaterialTheme.typography.bodySmall)
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text(
+                                            text = q.role,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = q.questionText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        if (q.keywordsCsv.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Cuvinte cheie: ${q.keywordsCsv}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.End
@@ -259,7 +335,12 @@ fun SetupScreen(
                                                 Icon(Icons.Default.Edit, contentDescription = "Editează", modifier = Modifier.size(18.dp))
                                             }
                                             IconButton(onClick = { viewModel.deleteCustomQuestion(q) }, modifier = Modifier.size(32.dp)) {
-                                                Icon(Icons.Default.Delete, contentDescription = "Șterge", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                                Icon(
+                                                    Icons.Default.Delete,
+                                                    contentDescription = "Șterge",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
                                         }
                                     }
@@ -276,7 +357,6 @@ fun SetupScreen(
             )
         }
 
-        // Dialog CREATE întrebare custom
         if (showCreateQuestionDialog) {
             CustomQuestionFormDialog(
                 title = "Întrebare Nouă ($selectedRole)",
@@ -302,7 +382,6 @@ fun SetupScreen(
             )
         }
 
-        // Dialog UPDATE întrebare custom
         editingQuestion?.let { current ->
             CustomQuestionFormDialog(
                 title = "Editează Întrebarea",
@@ -328,6 +407,95 @@ fun SetupScreen(
 }
 
 @Composable
+fun PillSelectorGroup(
+    label: String,
+    options: List<String>,
+    selectedOption: String,
+    onOptionSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { option ->
+                val isSelected = option == selectedOption
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onOptionSelected(option) }
+                ) {
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun QuickActionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(8.dp).size(20.dp)
+                )
+            }
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun CustomQuestionFormDialog(
     title: String,
     initialQuestion: String,
@@ -344,31 +512,35 @@ fun CustomQuestionFormDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = questionText,
                     onValueChange = { questionText = it },
                     label = { Text("Întrebarea") },
+                    shape = RoundedCornerShape(12.dp),
                     maxLines = 3
                 )
                 OutlinedTextField(
                     value = referenceAnswer,
                     onValueChange = { referenceAnswer = it },
                     label = { Text("Răspuns ideal") },
+                    shape = RoundedCornerShape(12.dp),
                     maxLines = 3
                 )
                 OutlinedTextField(
                     value = keywordsCsv,
                     onValueChange = { keywordsCsv = it },
                     label = { Text("Cuvinte cheie (ex: O(1), HashMap)") },
+                    shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
                 OutlinedTextField(
                     value = hint,
                     onValueChange = { hint = it },
                     label = { Text("Indiciu (opțional)") },
+                    shape = RoundedCornerShape(12.dp),
                     singleLine = true
                 )
             }
@@ -412,6 +584,7 @@ fun DropdownSelector(
             onValueChange = {},
             readOnly = true,
             label = { Text(label) },
+            shape = RoundedCornerShape(12.dp),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)

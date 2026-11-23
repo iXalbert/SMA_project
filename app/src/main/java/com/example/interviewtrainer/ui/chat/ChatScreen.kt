@@ -6,16 +6,20 @@ import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +47,7 @@ fun ChatScreen(
     var userText by remember { mutableStateOf("") }
     var editingMessageIndex by remember { mutableStateOf<Int?>(null) }
     var editingMessageText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
     val voiceHelper = remember {
         VoiceHelper(context) {}
@@ -67,6 +72,9 @@ fun ChatScreen(
     }
 
     LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
         val lastMsg = messages.lastOrNull()
         if (lastMsg != null && lastMsg.role == MessageRole.INTERVIEWER) {
             voiceHelper.speak(lastMsg.text, config.language)
@@ -74,15 +82,47 @@ fun ChatScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("${config.role} (${config.experienceLevel})", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                title = {
+                    Column {
+                        Text(
+                            text = config.role,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${config.experienceLevel} • ${config.language}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
                 actions = {
-                    IconButton(onClick = {
-                        voiceHelper.shutdown()
-                        viewModel.finishInterview(onFinishSession)
-                    }) {
-                        Icon(Icons.Default.Check, contentDescription = "Încheie Interviul")
+                    FilledTonalButton(
+                        onClick = {
+                            voiceHelper.shutdown()
+                            viewModel.finishInterview(onFinishSession)
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) "Finish" else "Încheie",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             )
@@ -93,116 +133,163 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(messages) { index, message ->
-                    ChatBubble(
-                        message = message,
-                        onEditUserMessage = if (message.role == MessageRole.USER) {
-                            {
-                                editingMessageIndex = index
-                                editingMessageText = message.text
-                            }
-                        } else null
-                    )
-                }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                if (isLoading) {
-                    item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            // Zona principală de mesaje (aici vom putea suprapune ulterior mini-preview-ul CameraX)
+            Box(modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    itemsIndexed(messages) { index, message ->
+                        ChatBubble(
+                            message = message,
+                            isEn = isEn,
+                            onEditUserMessage = if (message.role == MessageRole.USER) {
+                                {
+                                    editingMessageIndex = index
+                                    editingMessageText = message.text
+                                }
+                            } else null
+                        )
+                    }
+
+                    if (isLoading) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                        Text(
+                                            text = if (isEn) "Interviewer is thinking..." else "Intervievatorul analizează...",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            // CHAT BAR
+            // Bara de input modernă
             Surface(
-                tonalElevation = 3.dp,
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 6.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    IconButton(
-                        onClick = { viewModel.requestHint() },
-                        enabled = !isLoading,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Buton Indiciu
+                        FilledTonalIconButton(
+                            onClick = { viewModel.requestHint() },
+                            enabled = !isLoading,
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            ),
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu", modifier = Modifier.size(20.dp))
+                        }
+
+                        // Buton Dictare Vocală
+                        FilledTonalIconButton(
+                            onClick = {
+                                try {
+                                    val intent = voiceHelper.createSpeechIntent(config.language)
+                                    speechLauncher.launch(intent)
+                                } catch (e: ActivityNotFoundException) {
+                                    val simulatedText = if (isEn)
+                                        "I would use a HashMap with O(1) time complexity."
+                                    else
+                                        "Aș folosi un HashMap cu complexitate O(1)."
+
+                                    userText = if (userText.isBlank()) simulatedText else "$userText $simulatedText"
+                                    Toast.makeText(context, "Simulare dictare vocală (Emulator Mode)", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = CircleShape,
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Mic, contentDescription = "Dictare Vocală", modifier = Modifier.size(20.dp))
+                        }
+
+                        OutlinedTextField(
+                            value = userText,
+                            onValueChange = { userText = it },
+                            placeholder = {
+                                Text(
+                                    text = if (isEn) "Type or dictate answer..." else "Scrie sau dictează...",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            },
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.weight(1f),
+                            maxLines = 4
                         )
-                    ) {
-                        Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu")
-                    }
 
-                    IconButton(
-                        onClick = {
-                            try {
-                                val intent = voiceHelper.createSpeechIntent(config.language)
-                                speechLauncher.launch(intent)
-                            } catch (e: ActivityNotFoundException) {
-                                val simulatedText = if (isEn)
-                                    "I would use a HashMap with O(1) time complexity."
-                                else
-                                    "Aș folosi un HashMap cu complexitate O(1)."
-
-                                userText = if (userText.isBlank()) simulatedText else "$userText $simulatedText"
-                                Toast.makeText(context, "Simulare dictare vocală (Emulator Mode)", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    ) {
-                        Icon(Icons.Default.Mic, contentDescription = "Dictare Vocală")
-                    }
-
-                    OutlinedTextField(
-                        value = userText,
-                        onValueChange = { userText = it },
-                        placeholder = {
-                            Text(if (isEn) "Type or speak answer..." else "Scrie sau dictează răspunsul...")
-                        },
-                        modifier = Modifier.weight(1f),
-                        maxLines = 3
-                    )
-
-                    IconButton(
-                        onClick = {
-                            viewModel.sendMessage(userText)
-                            userText = ""
-                        },
-                        enabled = userText.isNotBlank() && !isLoading
-                    ) {
-                        Icon(Icons.Default.Send, contentDescription = "Trimite")
+                        // Buton Trimite
+                        FilledIconButton(
+                            onClick = {
+                                viewModel.sendMessage(userText)
+                                userText = ""
+                            },
+                            enabled = userText.isNotBlank() && !isLoading,
+                            shape = CircleShape,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Icon(Icons.Default.Send, contentDescription = "Trimite", modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
             }
         }
 
-        // Dialog UPDATE pentru corectarea transcrierii vocale (ex. "O de 1" -> "O(1)")
+        // Dialog UPDATE pentru corectarea transcrierii vocale
         if (editingMessageIndex != null) {
             AlertDialog(
                 onDismissRequest = { editingMessageIndex = null },
-                title = { Text(if (isEn) "Edit Transcribed Answer" else "Corectează răspunsul") },
+                title = {
+                    Text(
+                        text = if (isEn) "Edit Transcribed Answer" else "Corectează răspunsul",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 text = {
                     OutlinedTextField(
                         value = editingMessageText,
                         onValueChange = { editingMessageText = it },
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 5
                     )
@@ -232,6 +319,7 @@ fun ChatScreen(
 @Composable
 fun ChatBubble(
     message: ChatMessage,
+    isEn: Boolean = false,
     onEditUserMessage: (() -> Unit)? = null
 ) {
     val isUser = message.role == MessageRole.USER
@@ -239,49 +327,95 @@ fun ChatBubble(
 
     val alignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
 
+    val bubbleShape = when {
+        isUser -> RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
+        isHint -> RoundedCornerShape(14.dp)
+        else -> RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
+    }
+
     val containerColor = when {
-        isUser -> MaterialTheme.colorScheme.primaryContainer
+        isUser -> MaterialTheme.colorScheme.primary
         isHint -> MaterialTheme.colorScheme.tertiaryContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surface
     }
 
     val textColor = when {
-        isUser -> MaterialTheme.colorScheme.onPrimaryContainer
+        isUser -> MaterialTheme.colorScheme.onPrimary
         isHint -> MaterialTheme.colorScheme.onTertiaryContainer
-        else -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
     }
+
+    val borderStroke = if (!isUser && !isHint) {
+        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    } else null
 
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment
     ) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
+            shape = bubbleShape,
             color = containerColor,
-            modifier = Modifier.widthIn(max = 290.dp)
+            border = borderStroke,
+            modifier = Modifier.widthIn(max = 310.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                if (!isUser && !isHint) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SupportAgent,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (isEn) "AI Interviewer" else "Intervievator AI",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 Text(
                     text = message.text,
                     color = textColor,
                     style = MaterialTheme.typography.bodyMedium
                 )
+
                 if (isUser && onEditUserMessage != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(
-                            onClick = onEditUserMessage,
-                            modifier = Modifier.size(24.dp)
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.16f),
+                            onClick = onEditUserMessage
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Editează răspunsul",
-                                tint = textColor.copy(alpha = 0.75f),
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Editează răspunsul",
+                                    tint = textColor,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "Edit" else "Editează",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = textColor
+                                )
+                            }
                         }
                     }
                 }
