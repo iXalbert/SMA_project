@@ -1,22 +1,18 @@
 package com.example.interviewtrainer.ui.setup
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,9 +21,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.interviewtrainer.data.model.CustomQuestionEntity
 import com.example.interviewtrainer.data.model.QuestionBankResponse
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,14 +35,9 @@ fun SetupScreen(
     val rawGistUrl = "https://gist.githubusercontent.com/iXalbert/d6f75eebf201f1efa3b108e514c74061/raw/questions.json"
 
     val isDarkMode by viewModel.isDarkMode.collectAsState()
-    val customQuestions by viewModel.customQuestions.collectAsState()
-    val savedInterviews by viewModel.savedInterviews.collectAsState()
     var questionBank by remember { mutableStateOf<QuestionBankResponse?>(null) }
     var isLoadingBank by remember { mutableStateOf(true) }
-
-    var showCustomBankSheet by remember { mutableStateOf(false) }
-    var editingQuestion by remember { mutableStateOf<CustomQuestionEntity?>(null) }
-    var showCreateQuestionDialog by remember { mutableStateOf(false) }
+    var showDailyAnswer by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
@@ -56,6 +47,19 @@ fun SetupScreen(
         } finally {
             isLoadingBank = false
         }
+    }
+
+    // Extragem o întrebare deterministă pentru "Întrebarea Zilei"
+    val dailyQuestion = remember(questionBank) {
+        val allQuestions = questionBank?.domains
+            ?.flatMap { it.specializations }
+            ?.flatMap { it.roles }
+            ?.flatMap { it.questions }
+            .orEmpty()
+        if (allQuestions.isNotEmpty()) {
+            val dayOfYear = Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+            allQuestions[dayOfYear % allQuestions.size]
+        } else null
     }
 
     val domains = questionBank?.domains?.map { it.name } ?: emptyList()
@@ -78,6 +82,9 @@ fun SetupScreen(
 
     val languages = listOf("Română", "Engleză")
     var selectedLanguage by remember { mutableStateOf(languages.first()) }
+
+    val sessionModes = listOf("Antrenament", "Simulare (2 min)")
+    var selectedMode by remember { mutableStateOf(sessionModes.first()) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -144,6 +151,70 @@ fun SetupScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Card Întrebarea Zilei (Daily Warmup)
+                dailyQuestion?.let { dq ->
+                    val isEn = selectedLanguage == "Engleză"
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { showDailyAnswer = !showDailyAnswer }
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.LocalFireDepartment,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = if (isEn) "DAILY WARMUP" else "ÎNTREBAREA ZILEI",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Text(
+                                    text = if (showDailyAnswer) "Ascunde" else "Vezi răspuns",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (isEn) dq.questionEn else dq.questionRo,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            AnimatedVisibility(visible = showDailyAnswer) {
+                                Column {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = if (isEn) dq.referenceAnswerEn else dq.referenceAnswerRo,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Card 1: Poziția vizată
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -185,7 +256,7 @@ fun SetupScreen(
                     }
                 }
 
-                // Card 2: Nivel și Limbă (Pill Selectors moderne)
+                // Card 2: Nivel, Limbă și Mod Simulare
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -216,33 +287,37 @@ fun SetupScreen(
                             selectedOption = selectedLanguage,
                             onOptionSelected = { selectedLanguage = it }
                         )
-                    }
-                }
 
-                // Carduri rapide pentru Banca Personală și Istoric
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    QuickActionCard(
-                        title = "Întrebările Mele",
-                        subtitle = "${customQuestions.size} salvate",
-                        icon = Icons.Default.Quiz,
-                        onClick = { showCustomBankSheet = true },
-                        modifier = Modifier.weight(1f)
-                    )
-                    QuickActionCard(
-                        title = "Istoric",
-                        subtitle = "${savedInterviews.size} sesiuni",
-                        icon = Icons.Default.History,
-                        onClick = onOpenHistory,
-                        modifier = Modifier.weight(1f)
-                    )
+                        PillSelectorGroup(
+                            label = "Mod de desfășurare",
+                            options = sessionModes,
+                            selectedOption = selectedMode,
+                            onOptionSelected = { selectedMode = it }
+                        )
+
+                        if (selectedMode == sessionModes[1]) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Timer,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Fără indicii • Cronometru 02:00 per întrebare",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Buton principal CTA
                 Button(
                     onClick = {
                         viewModel.updateConfig(
@@ -250,7 +325,8 @@ fun SetupScreen(
                             specialization = selectedSpecialization,
                             role = selectedRole,
                             experienceLevel = selectedLevel,
-                            language = selectedLanguage
+                            language = selectedLanguage,
+                            isTimedMode = (selectedMode == sessionModes[1])
                         )
                         viewModel.startInterview(rawGistUrl)
                         onStartInterview()
@@ -270,138 +346,6 @@ fun SetupScreen(
                     )
                 }
             }
-        }
-
-        // Dialog listă întrebări proprii (CRUD Custom Questions)
-        if (showCustomBankSheet) {
-            AlertDialog(
-                onDismissRequest = { showCustomBankSheet = false },
-                title = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Întrebările Mele", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        FilledTonalIconButton(onClick = { showCreateQuestionDialog = true }) {
-                            Icon(Icons.Default.Add, contentDescription = "Adaugă Întrebare")
-                        }
-                    }
-                },
-                text = {
-                    if (customQuestions.isEmpty()) {
-                        Text(
-                            text = "Nu ai adăugat încă întrebări proprii. Apasă + pentru a crea una pentru rolul $selectedRole.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier.heightIn(max = 340.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(customQuestions, key = { it.id }) { q ->
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            text = q.role,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = q.questionText,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        if (q.keywordsCsv.isNotBlank()) {
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = "Cuvinte cheie: ${q.keywordsCsv}",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.End
-                                        ) {
-                                            IconButton(onClick = { editingQuestion = q }, modifier = Modifier.size(32.dp)) {
-                                                Icon(Icons.Default.Edit, contentDescription = "Editează", modifier = Modifier.size(18.dp))
-                                            }
-                                            IconButton(onClick = { viewModel.deleteCustomQuestion(q) }, modifier = Modifier.size(32.dp)) {
-                                                Icon(
-                                                    Icons.Default.Delete,
-                                                    contentDescription = "Șterge",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showCustomBankSheet = false }) {
-                        Text("Închide")
-                    }
-                }
-            )
-        }
-
-        if (showCreateQuestionDialog) {
-            CustomQuestionFormDialog(
-                title = "Întrebare Nouă ($selectedRole)",
-                initialQuestion = "",
-                initialAnswer = "",
-                initialKeywords = "",
-                initialHint = "",
-                onDismiss = { showCreateQuestionDialog = false },
-                onSave = { qText, refAns, kw, hint ->
-                    viewModel.addCustomQuestion(
-                        CustomQuestionEntity(
-                            domain = selectedDomain,
-                            specialization = selectedSpecialization,
-                            role = selectedRole.ifBlank { "Software Engineer" },
-                            questionText = qText,
-                            referenceAnswer = refAns,
-                            keywordsCsv = kw,
-                            hint = hint
-                        )
-                    )
-                    showCreateQuestionDialog = false
-                }
-            )
-        }
-
-        editingQuestion?.let { current ->
-            CustomQuestionFormDialog(
-                title = "Editează Întrebarea",
-                initialQuestion = current.questionText,
-                initialAnswer = current.referenceAnswer,
-                initialKeywords = current.keywordsCsv,
-                initialHint = current.hint,
-                onDismiss = { editingQuestion = null },
-                onSave = { qText, refAns, kw, hint ->
-                    viewModel.updateCustomQuestion(
-                        current.copy(
-                            questionText = qText,
-                            referenceAnswer = refAns,
-                            keywordsCsv = kw,
-                            hint = hint
-                        )
-                    )
-                    editingQuestion = null
-                }
-            )
         }
     }
 }
@@ -442,54 +386,6 @@ fun PillSelectorGroup(
                         modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp)
                     )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun QuickActionCard(
-    title: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(8.dp).size(20.dp)
-                )
-            }
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

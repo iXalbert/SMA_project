@@ -1,5 +1,6 @@
 package com.example.interviewtrainer.ui.feedback
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -12,12 +13,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,8 +34,12 @@ fun FeedbackScreen(
     viewModel: InterviewViewModel,
     onBackToSetup: () -> Unit
 ) {
+    val context = LocalContext.current
     val report by viewModel.report.collectAsState()
-    val isEn = viewModel.config.collectAsState().value.language == "Engleză"
+    val analytics by viewModel.sessionAnalytics.collectAsState()
+    val videoReport by viewModel.videoReport.collectAsState()
+    val config by viewModel.config.collectAsState()
+    val isEn = config.language == "Engleză"
 
     var selectedReviewPair by remember { mutableStateOf<Pair<Int, QuestionReview>?>(null) }
 
@@ -59,6 +66,32 @@ fun FeedbackScreen(
                         text = if (isEn) "Interview Report" else "Raport Evaluare",
                         fontWeight = FontWeight.Bold
                     )
+                },
+                actions = {
+                    report?.let { rep ->
+                        IconButton(
+                            onClick = {
+                                val shareText = buildString {
+                                    appendLine("📋 Raport Interview Trainer — ${config.role} (${config.experienceLevel})")
+                                    appendLine("🏆 Scor: ${rep.score}%")
+                                    appendLine("📝 Rezumat: ${rep.summary}")
+                                    analytics?.let { a ->
+                                        appendLine("⏱ Timp mediu răspuns: ${a.averageSecondsPerAnswer}s • Ritm: ${a.wordsPerMinute} cuv/min • Cuvinte de umplutură: ${a.fillerWordsCount}")
+                                    }
+                                    videoReport?.let { v ->
+                                        appendLine("👁 Contact vizual: ${v.eyeContactScore}% • Postură: ${v.postureStabilityScore}% • Expresivitate: ${v.engagementScore}%")
+                                    }
+                                }
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Trimite raportul"))
+                            }
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Trimite raport")
+                        }
+                    }
                 }
             )
         }
@@ -87,6 +120,7 @@ fun FeedbackScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                // Card 1: Scor General
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -124,6 +158,90 @@ fun FeedbackScreen(
                     }
                 }
 
+                // Card 2: Speech & Pace Analytics
+                analytics?.let { stats ->
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                MetricMiniItem(
+                                    value = "${stats.averageSecondsPerAnswer}s",
+                                    label = if (isEn) "Avg / Answer" else "Medie / Răspuns"
+                                )
+                                MetricMiniItem(
+                                    value = "${stats.wordsPerMinute}",
+                                    label = if (isEn) "Words / Min" else "Cuvinte / Min"
+                                )
+                                MetricMiniItem(
+                                    value = "${stats.fillerWordsCount}",
+                                    label = if (isEn) "Filler Words" else "Cuv. Umplutură"
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Card 3: Analiză Video Nonverbală (TensorFlow Lite Face Landmarker)
+                videoReport?.let { vReport ->
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text(
+                                    text = if (isEn) "NON-VERBAL & BODY LANGUAGE (AI VISION)" else "LIMBAJ NONVERBAL & PREZENȚĂ (AI VISION)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    MetricMiniItem(
+                                        value = "${vReport.eyeContactScore}%",
+                                        label = if (isEn) "Eye Contact" else "Contact Vizual"
+                                    )
+                                    MetricMiniItem(
+                                        value = "${vReport.postureStabilityScore}%",
+                                        label = if (isEn) "Posture" else "Postură Calmă"
+                                    )
+                                    MetricMiniItem(
+                                        value = "${vReport.engagementScore}%",
+                                        label = if (isEn) "Engagement" else "Expresivitate"
+                                    )
+                                }
+
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                                Text(
+                                    text = if (isEn) vReport.feedbackEn else vReport.feedbackRo,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Lista de întrebări și răspunsuri (Master-Detail)
                 if (currentReport.reviews.isNotEmpty()) {
                     item {
                         Column(modifier = Modifier.padding(top = 4.dp)) {
@@ -169,6 +287,23 @@ fun FeedbackScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun MetricMiniItem(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

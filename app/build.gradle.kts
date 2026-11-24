@@ -40,6 +40,9 @@ android {
     buildFeatures {
         compose = true
     }
+    androidResources {
+        noCompress += listOf("tflite", "task")
+    }
 }
 
 dependencies {
@@ -85,4 +88,15 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
+
+    // CameraX pentru preview Picture-in-Picture și analiză cadre în timp real
+    val cameraxVersion = "1.3.4"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // TensorFlow Lite / MediaPipe Tasks Vision (rulează modele .tflite / .task on-device)
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    //implementation("org.tensorflow:tensorflow-lite:2.14.0")
 }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.example.interviewtrainer.utils.VideoSessionReport
 
 class InterviewViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -33,6 +34,8 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
 
     val customQuestions: StateFlow<List<CustomQuestionEntity>> = MutableStateFlow(emptyList())
 
+    val bookmarks: StateFlow<List<BookmarkedQuestionEntity>> = MutableStateFlow(emptyList())
+
     private val _config = MutableStateFlow(InterviewConfig())
     val config: StateFlow<InterviewConfig> = _config.asStateFlow()
 
@@ -44,6 +47,22 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _report = MutableStateFlow<InterviewReport?>(null)
     val report: StateFlow<InterviewReport?> = _report.asStateFlow()
+
+    private val _isTimedMode = MutableStateFlow(false)
+    val isTimedMode: StateFlow<Boolean> = _isTimedMode
+
+    private val _sessionAnalytics = MutableStateFlow<SessionAnalytics?>(null)
+    val sessionAnalytics: StateFlow<SessionAnalytics?> = _sessionAnalytics
+
+    private val _videoReport = MutableStateFlow<VideoSessionReport?>(null)
+    val videoReport: StateFlow<VideoSessionReport?> = _videoReport
+
+    fun setVideoReport(report: VideoSessionReport?) {
+        _videoReport.value = report
+    }
+
+    private var questionAskedTimestamp: Long = System.currentTimeMillis()
+    private val answerDurationsSec = mutableListOf<Int>()
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -62,12 +81,17 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
                 (customQuestions as MutableStateFlow).value = list
             }
         }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.getAllBookmarks().collect { list ->
+                (bookmarks as MutableStateFlow).value = list
+            }
+        }
     }
 
     fun toggleBookmark(question: QuestionDto) {
         viewModelScope.launch(Dispatchers.IO) {
-            val exists = dao.isBookmarked(question.id)
-            if (exists) {
+            if (dao.isBookmarked(question.id)) {
                 dao.deleteBookmark(question.id)
             } else {
                 dao.insertBookmark(
@@ -88,23 +112,38 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun removeBookmark(questionId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            dao.deleteBookmark(questionId)
+        }
+    }
+
     fun updateConfig(
         domain: String,
         specialization: String,
         role: String,
         experienceLevel: String,
-        language: String
+        language: String,
+        isTimedMode: Boolean = false
     ) {
         _config.value = InterviewConfig(
-            domain = domain,
-            specialization = specialization,
-            role = role,
-            experienceLevel = experienceLevel,
-            language = language
+            domain,
+            specialization,
+            role,
+            experienceLevel,
+            language
         )
+        _isTimedMode.value = isTimedMode
     }
 
     fun startInterview(rawGistUrl: String) {
+
+        _videoReport.value = null
+
+        answerDurationsSec.clear()
+        _sessionAnalytics.value = null
+        questionAskedTimestamp = System.currentTimeMillis()
+
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             _messages.value = emptyList()
@@ -144,6 +183,10 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
         currentList.add(ChatMessage(text = userText, role = MessageRole.USER))
         _messages.value = currentList
 
+        val elapsedSec = ((System.currentTimeMillis() - questionAskedTimestamp) / 1000L).toInt().coerceAtLeast(1)
+        answerDurationsSec.add(elapsedSec)
+        questionAskedTimestamp = System.currentTimeMillis()
+
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
             val (aiText, qData) = repository.sendMessage(userText, _config.value)
@@ -180,6 +223,32 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
                     summary = generatedReport.summary,
                     detailsJson = generatedReport.reviews.toDetailsJson()
                 )
+            )
+
+            val userResponses = _messages.value
+                .filter { it.role == MessageRole.USER }
+                .map { it.text }
+
+            val allWords = userResponses
+                .flatMap { it.lowercase().split(Regex("[^a-zA-ZăâîșțĂÂÎȘȚ0-9]+")) }
+                .filter { it.isNotBlank() }
+
+            val fillerDictionary = setOf(
+                "ăăă", "aaa", "gen", "practic", "deci", "cumva", "efectiv",
+                "like", "basically", "actually", "literally", "um", "uh"
+            )
+            val foundFillers = allWords.filter { it in fillerDictionary }
+
+            val totalSeconds = answerDurationsSec.sum().coerceAtLeast(1)
+            val avgSeconds = if (answerDurationsSec.isNotEmpty()) totalSeconds / answerDurationsSec.size else 0
+            val wpm = ((allWords.size.toDouble() / totalSeconds.toDouble()) * 60.0).toInt().coerceIn(0, 300)
+
+            _sessionAnalytics.value = SessionAnalytics(
+                averageSecondsPerAnswer = avgSeconds,
+                wordsPerMinute = wpm,
+                fillerWordsCount = foundFillers.size,
+                detectedFillers = foundFillers.distinct(),
+                isTimedMode = _isTimedMode.value
             )
 
             _isLoading.value = false
@@ -219,3 +288,12 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 }
+
+data class SessionAnalytics(
+    val averageSecondsPerAnswer: Int,
+    val wordsPerMinute: Int,
+    val fillerWordsCount: Int,
+    val detectedFillers: List<String>,
+    val isTimedMode: Boolean
+)
+
