@@ -76,26 +76,20 @@ fun ChatScreen(
     var editingMessageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
 
-    // Stare CameraX + TensorFlow Lite Face Landmarker
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
                     PackageManager.PERMISSION_GRANTED
         )
     }
-    var isCameraEnabled by remember { mutableStateOf(true) }
+    var isCameraEnabled by remember { mutableStateOf(false) }
     var liveMetrics by remember { mutableStateOf(LiveVideoMetrics()) }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCameraPermission = granted
-    }
-
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
+        if (granted) isCameraEnabled = true
     }
 
     val videoAnalyzer = remember {
@@ -104,7 +98,6 @@ fun ChatScreen(
         }
     }
 
-    // Cronometru per întrebare (120 secunde în modul Simulare Reală)
     var remainingSeconds by remember { mutableIntStateOf(120) }
 
     val voiceHelper = remember {
@@ -154,6 +147,7 @@ fun ChatScreen(
     val timerSecs = remainingSeconds % 60
     val timerFormatted = String.format("%02d:%02d", timerMinutes, timerSecs)
     val timerUrgent = remainingSeconds <= 20
+    val cameraActive = hasCameraPermission && isCameraEnabled
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -177,7 +171,6 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    // Buton pornire/oprire cameră pentru analiza nonverbală
                     IconButton(
                         onClick = {
                             if (!hasCameraPermission) {
@@ -188,9 +181,9 @@ fun ChatScreen(
                         }
                     ) {
                         Icon(
-                            imageVector = if (hasCameraPermission && isCameraEnabled) Icons.Default.Videocam else Icons.Default.VideocamOff,
+                            imageVector = if (cameraActive) Icons.Default.Videocam else Icons.Default.VideocamOff,
                             contentDescription = "Analiză Video",
-                            tint = if (hasCameraPermission && isCameraEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = if (cameraActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -269,6 +262,7 @@ fun ChatScreen(
                         ChatBubble(
                             message = message,
                             isEn = isEn,
+                            isCameraActive = cameraActive,
                             isBookmarked = isBookmarked,
                             onToggleBookmark = if (qData != null) {
                                 { viewModel.toggleBookmark(qData) }
@@ -313,8 +307,7 @@ fun ChatScreen(
                     }
                 }
 
-                // Mini-fereastră Picture-in-Picture (CameraX + TFLite) în colțul din dreapta sus
-                if (hasCameraPermission && isCameraEnabled) {
+                if (cameraActive) {
                     CameraPipPreview(
                         lifecycleOwner = lifecycleOwner,
                         analyzer = videoAnalyzer,
@@ -327,7 +320,6 @@ fun ChatScreen(
                 }
             }
 
-            // Bara de input modernă
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 6.dp,
@@ -460,7 +452,6 @@ fun CameraPipPreview(
     isEn: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
 
     DisposableEffect(Unit) {
@@ -470,8 +461,8 @@ fun CameraPipPreview(
     }
 
     val badgeColor = when {
-        !liveMetrics.faceDetected -> Color(0xFFDC2626)
-        !liveMetrics.eyeContactOk || !liveMetrics.postureStable -> Color(0xFFD97706)
+        !liveMetrics.faceDetected || liveMetrics.nervousFaceTouch -> Color(0xFFDC2626)
+        !liveMetrics.eyeContactOk || !liveMetrics.shouldersAligned -> Color(0xFFD97706)
         else -> Color(0xFF16A34A)
     }
 
@@ -519,7 +510,6 @@ fun CameraPipPreview(
                     .clip(RoundedCornerShape(14.dp))
             )
 
-            // Etichetă discretă jos pe preview cu feedback live
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -544,6 +534,7 @@ fun CameraPipPreview(
 fun ChatBubble(
     message: ChatMessage,
     isEn: Boolean = false,
+    isCameraActive: Boolean = false,
     isBookmarked: Boolean = false,
     onToggleBookmark: (() -> Unit)? = null,
     onEditUserMessage: (() -> Unit)? = null
@@ -576,7 +567,9 @@ fun ChatBubble(
     } else null
 
     Box(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(end = if (isCameraActive) 124.dp else 0.dp),
         contentAlignment = alignment
     ) {
         Surface(

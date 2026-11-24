@@ -10,16 +10,19 @@ import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
+import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import kotlin.math.abs
 import kotlin.math.hypot
 
 data class LiveVideoMetrics(
     val faceDetected: Boolean = false,
     val eyeContactOk: Boolean = true,
-    val postureStable: Boolean = true,
-    val statusLabelRo: String = "Calibrare cameră...",
-    val statusLabelEn: String = "Calibrating camera..."
+    val shouldersAligned: Boolean = true,
+    val handsActive: Boolean = false,
+    val nervousFaceTouch: Boolean = false,
+    val statusLabelRo: String = "Calibrare cameră AI...",
+    val statusLabelEn: String = "Calibrating AI camera..."
 )
 
 data class VideoSessionReport(
@@ -27,6 +30,8 @@ data class VideoSessionReport(
     val eyeContactScore: Int,
     val postureStabilityScore: Int,
     val engagementScore: Int,
+    val handGestureScore: Int,
+    val faceTouchCount: Int,
     val feedbackRo: String,
     val feedbackEn: String
 )
@@ -37,30 +42,57 @@ class BodyLanguageAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     private var faceLandmarker: FaceLandmarker? = null
+    private var poseLandmarker: PoseLandmarker? = null
+    private var handLandmarker: HandLandmarker? = null
 
     private var totalFrames = 0
     private var eyeContactFrames = 0
-    private var stablePostureFrames = 0
+    private var alignedShouldersFrames = 0
+    private var handsDetectedFrames = 0
+    private var faceTouchCount = 0
     private var engagementAccumulator = 0f
 
-    private var prevNoseX: Float? = null
-    private var prevNoseY: Float? = null
+    private var prevShoulderMidX: Float? = null
+    private var prevShoulderMidY: Float? = null
     private var lastProcessedTime = 0L
 
     init {
         try {
-            val baseOptions = BaseOptions.builder()
-                .setModelAssetPath("face_landmarker.task")
-                .build()
+            faceLandmarker = FaceLandmarker.createFromOptions(
+                context,
+                FaceLandmarker.FaceLandmarkerOptions.builder()
+                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("face_landmarker.task").build())
+                    .setRunningMode(RunningMode.VIDEO)
+                    .setNumFaces(1)
+                    .setOutputFaceBlendshapes(true)
+                    .build()
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
-            val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setRunningMode(RunningMode.VIDEO)
-                .setNumFaces(1)
-                .setOutputFaceBlendshapes(true)
-                .build()
+        try {
+            poseLandmarker = PoseLandmarker.createFromOptions(
+                context,
+                PoseLandmarker.PoseLandmarkerOptions.builder()
+                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("pose_landmarker_lite.task").build())
+                    .setRunningMode(RunningMode.VIDEO)
+                    .setNumPoses(1)
+                    .build()
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
 
-            faceLandmarker = FaceLandmarker.createFromOptions(context, options)
+        try {
+            handLandmarker = HandLandmarker.createFromOptions(
+                context,
+                HandLandmarker.HandLandmarkerOptions.builder()
+                    .setBaseOptions(BaseOptions.builder().setModelAssetPath("hand_landmarker.task").build())
+                    .setRunningMode(RunningMode.VIDEO)
+                    .setNumHands(2)
+                    .build()
+            )
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -68,24 +100,123 @@ class BodyLanguageAnalyzer(
 
     override fun analyze(imageProxy: ImageProxy) {
         val now = SystemClock.uptimeMillis()
-        // Procesăm ~5 cadre pe secundă pentru a păstra telefonul rece și UI-ul fluid
-        if (now - lastProcessedTime < 200L) {
+        if (now - lastProcessedTime < 220L) {
             imageProxy.close()
             return
         }
         lastProcessedTime = now
 
-        val landmarker = faceLandmarker
-        if (landmarker == null) {
-            imageProxy.close()
-            return
-        }
-
         try {
             val bitmap = imageProxy.toRotatedBitmap()
             val mpImage = BitmapImageBuilder(bitmap).build()
-            val result = landmarker.detectForVideo(mpImage, now)
-            processResult(result)
+
+            val faceResult = faceLandmarker?.detectForVideo(mpImage, now)
+            val poseResult = poseLandmarker?.detectForVideo(mpImage, now)
+            val handResult = handLandmarker?.detectForVideo(mpImage, now)
+
+            val faceLandmarks = faceResult?.faceLandmarks()?.firstOrNull()
+            if (faceLandmarks == null || faceLandmarks.size < 455) {
+                onLiveUpdate(
+                    LiveVideoMetrics(
+                        faceDetected = false,
+                        eyeContactOk = false,
+                        shouldersAligned = false,
+                        statusLabelRo = "Poziționează-te în cadru",
+                        statusLabelEn = "Position yourself in frame"
+                    )
+                )
+                return
+            }
+
+            totalFrames++
+
+            // 1. Contact vizual (Face Landmarker)
+            val nose = faceLandmarks[1]
+            val leftCheek = faceLandmarks[234]
+            val rightCheek = faceLandmarks[454]
+            val forehead = faceLandmarks[10]
+            val chin = faceLandmarks[152]
+
+            val faceWidth = abs(rightCheek.x() - leftCheek.x()).coerceAtLeast(0.01f)
+            val faceCenterX = (leftCheek.x() + rightCheek.x()) / 2f
+            val horizontalOffset = abs(nose.x() - faceCenterX) / faceWidth
+
+            val faceHeight = abs(chin.y() - forehead.y()).coerceAtLeast(0.01f)
+            val faceCenterY = (forehead.y() + chin.y()) / 2f
+            val verticalOffset = abs(nose.y() - faceCenterY) / faceHeight
+
+            val isLookingAtCamera = horizontalOffset < 0.16f && verticalOffset < 0.18f
+            if (isLookingAtCamera) eyeContactFrames++
+
+            // 2. Postura umerilor (Pose Landmarker: 11 = umăr stâng, 12 = umăr drept)
+            var shouldersOk = true
+            val poseLandmarks = poseResult?.landmarks()?.firstOrNull()
+            if (poseLandmarks != null && poseLandmarks.size > 12) {
+                val leftShoulder = poseLandmarks[11]
+                val rightShoulder = poseLandmarks[12]
+
+                val shoulderTilt = abs(leftShoulder.y() - rightShoulder.y())
+                val midX = (leftShoulder.x() + rightShoulder.x()) / 2f
+                val midY = (leftShoulder.y() + rightShoulder.y()) / 2f
+
+                val sway = if (prevShoulderMidX != null && prevShoulderMidY != null) {
+                    hypot((midX - prevShoulderMidX!!).toDouble(), (midY - prevShoulderMidY!!).toDouble()).toFloat()
+                } else 0f
+
+                prevShoulderMidX = midX
+                prevShoulderMidY = midY
+
+                shouldersOk = shoulderTilt < 0.065f && sway < 0.04f
+            }
+            if (shouldersOk) alignedShouldersFrames++
+
+            // 3. Mișcarea mâinilor & atingerea nervoasă a feței (Hand Landmarker)
+            val hands = handResult?.landmarks().orEmpty()
+            val handsVisible = hands.isNotEmpty()
+            if (handsVisible) handsDetectedFrames++
+
+            var touchingFace = false
+            for (hand in hands) {
+                val indexTip = hand[8]
+                val distToNose = hypot((indexTip.x() - nose.x()).toDouble(), (indexTip.y() - nose.y()).toDouble()).toFloat()
+                if (distToNose < faceWidth * 0.65f) {
+                    touchingFace = true
+                    faceTouchCount++
+                    break
+                }
+            }
+
+            // 4. Expresivitate / Engagement (Face Blendshapes)
+            var frameEngagement = 0.65f
+            val blendshapes = faceResult.faceBlendshapes().orElse(null)?.firstOrNull()
+            if (blendshapes != null) {
+                val smileLeft = blendshapes.find { it.categoryName() == "mouthSmileLeft" }?.score() ?: 0f
+                val smileRight = blendshapes.find { it.categoryName() == "mouthSmileRight" }?.score() ?: 0f
+                val browUp = blendshapes.find { it.categoryName() == "browInnerUp" }?.score() ?: 0f
+                val positive = ((smileLeft + smileRight) * 0.45f) + (browUp * 0.25f)
+                frameEngagement = (0.65f + positive).coerceIn(0.25f, 1.0f)
+            }
+            engagementAccumulator += frameEngagement
+
+            val (statusRo, statusEn) = when {
+                touchingFace -> "Evită să îți atingi fața" to "Avoid touching your face"
+                !isLookingAtCamera -> "Privește spre Amalia (cameră)" to "Look at Amalia (camera)"
+                !shouldersOk -> "Îndreaptă umerii / postură calmă" to "Align shoulders / steady posture"
+                handsVisible -> "Prezență & gesticulație bună" to "Great presence & gestures"
+                else -> "Contact vizual & postură optimă" to "Optimal eye contact & posture"
+            }
+
+            onLiveUpdate(
+                LiveVideoMetrics(
+                    faceDetected = true,
+                    eyeContactOk = isLookingAtCamera,
+                    shouldersAligned = shouldersOk,
+                    handsActive = handsVisible,
+                    nervousFaceTouch = touchingFace,
+                    statusLabelRo = statusRo,
+                    statusLabelEn = statusEn
+                )
+            )
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
@@ -93,108 +224,56 @@ class BodyLanguageAnalyzer(
         }
     }
 
-    private fun processResult(result: FaceLandmarkerResult) {
-        val landmarks = result.faceLandmarks().firstOrNull()
-        if (landmarks == null || landmarks.size < 455) {
-            onLiveUpdate(
-                LiveVideoMetrics(
-                    faceDetected = false,
-                    eyeContactOk = false,
-                    postureStable = false,
-                    statusLabelRo = "Fața nu este în cadru",
-                    statusLabelEn = "Face not in frame"
-                )
-            )
-            return
-        }
-
-        totalFrames++
-
-        // Puncte cheie MediaPipe Face Mesh: 1 = vârful nasului, 234 = obraz stâng, 454 = obraz drept, 10 = frunte, 152 = bărbie
-        val nose = landmarks[1]
-        val leftCheek = landmarks[234]
-        val rightCheek = landmarks[454]
-        val forehead = landmarks[10]
-        val chin = landmarks[152]
-
-        // 1. Contact vizual (orientare stânga-dreapta și sus-jos)
-        val faceWidth = abs(rightCheek.x() - leftCheek.x()).coerceAtLeast(0.01f)
-        val faceCenterX = (leftCheek.x() + rightCheek.x()) / 2f
-        val horizontalOffsetRatio = abs(nose.x() - faceCenterX) / faceWidth
-
-        val faceHeight = abs(chin.y() - forehead.y()).coerceAtLeast(0.01f)
-        val faceCenterY = (forehead.y() + chin.y()) / 2f
-        val verticalOffsetRatio = abs(nose.y() - faceCenterY) / faceHeight
-
-        val isLookingAtCamera = horizontalOffsetRatio < 0.16f && verticalOffsetRatio < 0.18f
-        if (isLookingAtCamera) eyeContactFrames++
-
-        // 2. Stabilitatea posturii (mișcarea bruscă a capului / umerilor între cadre)
-        val movementDelta = if (prevNoseX != null && prevNoseY != null) {
-            hypot((nose.x() - prevNoseX!!).toDouble(), (nose.y() - prevNoseY!!).toDouble()).toFloat()
-        } else 0f
-
-        prevNoseX = nose.x()
-        prevNoseY = nose.y()
-
-        val isPostureStable = movementDelta < 0.035f
-        if (isPostureStable) stablePostureFrames++
-
-        // 3. Expresivitate / Engagement din blendshapes (TFLite output)
-        var frameEngagement = 0.65f
-        val blendshapes = result.faceBlendshapes().orElse(null)?.firstOrNull()
-        if (blendshapes != null) {
-            val smileLeft = blendshapes.find { it.categoryName() == "mouthSmileLeft" }?.score() ?: 0f
-            val smileRight = blendshapes.find { it.categoryName() == "mouthSmileRight" }?.score() ?: 0f
-            val browUp = blendshapes.find { it.categoryName() == "browInnerUp" }?.score() ?: 0f
-            val frownLeft = blendshapes.find { it.categoryName() == "browDownLeft" }?.score() ?: 0f
-
-            val positiveSignal = ((smileLeft + smileRight) * 0.45f) + (browUp * 0.25f) - (frownLeft * 0.30f)
-            frameEngagement = (0.65f + positiveSignal).coerceIn(0.2f, 1.0f)
-        }
-        engagementAccumulator += frameEngagement
-
-        val (statusRo, statusEn) = when {
-            !isLookingAtCamera -> "Privește spre cameră" to "Look at the camera"
-            !isPostureStable -> "Păstrează postura calmă" to "Keep steady posture"
-            else -> "Contact vizual optim" to "Great eye contact"
-        }
-
-        onLiveUpdate(
-            LiveVideoMetrics(
-                faceDetected = true,
-                eyeContactOk = isLookingAtCamera,
-                postureStable = isPostureStable,
-                statusLabelRo = statusRo,
-                statusLabelEn = statusEn
-            )
-        )
-    }
-
     fun buildSessionReport(): VideoSessionReport? {
         if (totalFrames < 3) return null
 
         val eyeScore = ((eyeContactFrames.toFloat() / totalFrames) * 100).toInt().coerceIn(0, 100)
-        val postureScore = ((stablePostureFrames.toFloat() / totalFrames) * 100).toInt().coerceIn(0, 100)
+        val postureScore = ((alignedShouldersFrames.toFloat() / totalFrames) * 100).toInt().coerceIn(0, 100)
         val engagementScore = ((engagementAccumulator / totalFrames) * 100).toInt().coerceIn(0, 100)
-
-        val notesRo = mutableListOf<String>()
-        val notesEn = mutableListOf<String>()
-
-        if (eyeScore >= 75) {
-            notesRo.add("Ai menținut un contact vizual foarte bun ($eyeScore%).")
-            notesEn.add("You maintained strong eye contact ($eyeScore%).")
-        } else {
-            notesRo.add("Încearcă să privești mai constant spre cameră când formulezi răspunsul ($eyeScore%).")
-            notesEn.add("Try to keep steadier eye contact with the camera while answering ($eyeScore%).")
+        val gestureRatio = (handsDetectedFrames.toFloat() / totalFrames)
+        val gestureScore = when {
+            gestureRatio in 0.15f..0.75f -> 90
+            gestureRatio > 0.75f -> 75
+            else -> 60
         }
 
-        if (postureScore >= 75) {
-            notesRo.add("Postură calmă și stăpână pe sine.")
-            notesEn.add("Calm and confident posture throughout the session.")
+        val tipsRo = mutableListOf<String>()
+        val tipsEn = mutableListOf<String>()
+
+        // 1. Contact vizual
+        if (eyeScore >= 75) {
+            tipsRo.add("✓ Contact vizual excelent ($eyeScore%) — ai transmis încredere.")
+            tipsEn.add("✓ Excellent eye contact ($eyeScore%) — projected confidence.")
         } else {
-            notesRo.add("S-au detectat mișcări frecvente ale capului/trunchiului — respiră și păstrează o postură stabilă.")
-            notesEn.add("Frequent head/upper-body movement detected — take a breath and keep a steady posture.")
+            tipsRo.add("• Îmbunătățire Contact Vizual ($eyeScore%): Privește direct spre camera frontală când explici soluția, nu în jos spre ecran.")
+            tipsEn.add("• Improve Eye Contact ($eyeScore%): Look directly at the front camera lens while explaining instead of looking down.")
+        }
+
+        // 2. Postura umerilor
+        if (postureScore >= 75) {
+            tipsRo.add("✓ Postură stabilă a umerilor ($postureScore%).")
+            tipsEn.add("✓ Steady, aligned shoulder posture ($postureScore%).")
+        } else {
+            tipsRo.add("• Îmbunătățire Postură ($postureScore%): Păstrează umerii drepți și evită balansul trunchiului când te gândești la răspuns.")
+            tipsEn.add("• Improve Posture ($postureScore%): Keep shoulders level and avoid swaying while thinking.")
+        }
+
+        // 3. Gesticulația mâinilor & atingerea feței
+        if (faceTouchCount > 2) {
+            tipsRo.add("• Control Gesturi: Ai dus mâna la față de $faceTouchCount ori (semn de stres). Ține mâinile relaxate sau folosește gesturi deschise.")
+            tipsEn.add("• Gesture Control: You touched your face $faceTouchCount times (stress cue). Keep hands relaxed or use open gestures.")
+        } else if (gestureRatio < 0.15f) {
+            tipsRo.add("• Gesticulație ($gestureScore%): Încadrează telefonul puțin mai departe ca să îți folosești natural mâinile când explici arhitectura/algoritmul.")
+            tipsEn.add("• Hand Gestures ($gestureScore%): Place the camera slightly further so natural hand gestures support your explanation.")
+        } else {
+            tipsRo.add("✓ Gesticulație echilibrată ($gestureScore%) pe parcursul explicațiilor.")
+            tipsEn.add("✓ Balanced hand gestures ($gestureScore%) during explanations.")
+        }
+
+        // 4. Expresivitate facială (Blendshapes)
+        if (engagementScore < 70) {
+            tipsRo.add("• Expresivitate ($engagementScore%): Încearcă un ton facial mai deschis și un zâmbet ușor la începutul și finalul răspunsului.")
+            tipsEn.add("• Engagement ($engagementScore%): Try a warmer facial expression and a slight smile when greeting and concluding.")
         }
 
         return VideoSessionReport(
@@ -202,17 +281,20 @@ class BodyLanguageAnalyzer(
             eyeContactScore = eyeScore,
             postureStabilityScore = postureScore,
             engagementScore = engagementScore,
-            feedbackRo = notesRo.joinToString(" "),
-            feedbackEn = notesEn.joinToString(" ")
+            handGestureScore = gestureScore,
+            faceTouchCount = faceTouchCount,
+            feedbackRo = tipsRo.joinToString("\n"),
+            feedbackEn = tipsEn.joinToString("\n")
         )
     }
 
     fun close() {
-        try {
-            faceLandmarker?.close()
-        } catch (_: Exception) {
-        }
+        try { faceLandmarker?.close() } catch (_: Exception) {}
+        try { poseLandmarker?.close() } catch (_: Exception) {}
+        try { handLandmarker?.close() } catch (_: Exception) {}
         faceLandmarker = null
+        poseLandmarker = null
+        handLandmarker = null
     }
 
     private fun ImageProxy.toRotatedBitmap(): Bitmap {

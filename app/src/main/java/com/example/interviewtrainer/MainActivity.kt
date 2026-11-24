@@ -3,34 +3,46 @@ package com.example.interviewtrainer
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.interviewtrainer.ui.bank.QuestionBankScreen
 import com.example.interviewtrainer.ui.chat.ChatScreen
+import com.example.interviewtrainer.ui.chat.VideoCallScreen
 import com.example.interviewtrainer.ui.feedback.FeedbackScreen
 import com.example.interviewtrainer.ui.history.HistoryScreen
 import com.example.interviewtrainer.ui.setup.SetupScreen
 import com.example.interviewtrainer.ui.theme.AIInterviewTrainerTheme
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
 
+private data class BottomNavItem(
+    val route: String,
+    val label: String,
+    val icon: ImageVector
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent {
             val viewModel: InterviewViewModel = viewModel()
             val isDarkMode by viewModel.isDarkMode.collectAsState()
+            val isVideoCallMode by viewModel.isVideoCallMode.collectAsState()
             val savedInterviews by viewModel.savedInterviews.collectAsState()
 
             AIInterviewTrainerTheme(darkTheme = isDarkMode) {
@@ -38,48 +50,34 @@ class MainActivity : ComponentActivity() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentRoute = navBackStackEntry?.destination?.route
 
-                val bottomBarRoutes = setOf("setup", "bank", "history")
-                val showBottomBar = currentRoute in bottomBarRoutes
+                val navItems = listOf(
+                    BottomNavItem("setup", "Antrenament", Icons.Default.PlayArrow),
+                    BottomNavItem("bank", "Bancă", Icons.Default.MenuBook),
+                    BottomNavItem("history", "Istoric", Icons.Default.History)
+                )
+
+                val showBottomBar = currentRoute in listOf("setup", "bank", "history")
 
                 Scaffold(
                     bottomBar = {
                         if (showBottomBar) {
-                            NavigationBar(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ) {
-                                NavigationBarItem(
-                                    selected = currentRoute == "setup",
-                                    onClick = {
-                                        navController.navigate("setup") {
-                                            popUpTo("setup") { inclusive = false }
-                                            launchSingleTop = true
-                                        }
-                                    },
-                                    icon = { Icon(Icons.Default.PlayCircle, contentDescription = null) },
-                                    label = { Text("Antrenament") }
-                                )
-                                NavigationBarItem(
-                                    selected = currentRoute == "bank",
-                                    onClick = {
-                                        navController.navigate("bank") {
-                                            popUpTo("setup") { inclusive = false }
-                                            launchSingleTop = true
-                                        }
-                                    },
-                                    icon = { Icon(Icons.Default.Bookmarks, contentDescription = null) },
-                                    label = { Text("Bancă") }
-                                )
-                                NavigationBarItem(
-                                    selected = currentRoute == "history",
-                                    onClick = {
-                                        navController.navigate("history") {
-                                            popUpTo("setup") { inclusive = false }
-                                            launchSingleTop = true
-                                        }
-                                    },
-                                    icon = { Icon(Icons.Default.History, contentDescription = null) },
-                                    label = { Text("Istoric") }
-                                )
+                            NavigationBar {
+                                navItems.forEach { item ->
+                                    NavigationBarItem(
+                                        selected = currentRoute == item.route,
+                                        onClick = {
+                                            navController.navigate(item.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        },
+                                        icon = { Icon(item.icon, contentDescription = item.label) },
+                                        label = { Text(item.label) }
+                                    )
+                                }
                             }
                         }
                     }
@@ -92,23 +90,48 @@ class MainActivity : ComponentActivity() {
                         composable("setup") {
                             SetupScreen(
                                 viewModel = viewModel,
-                                onStartInterview = { navController.navigate("chat") },
-                                onOpenHistory = { navController.navigate("history") }
-                            )
-                        }
-                        composable("bank") {
-                            QuestionBankScreen(viewModel = viewModel)
-                        }
-                        composable("chat") {
-                            ChatScreen(
-                                viewModel = viewModel,
-                                onFinishSession = {
-                                    navController.navigate("feedback") {
-                                        popUpTo("setup") { inclusive = false }
-                                    }
+                                onStartInterview = {
+                                    navController.navigate("chat")
                                 }
                             )
                         }
+
+                        composable("bank") {
+                            QuestionBankScreen(viewModel = viewModel)
+                        }
+
+                        composable("history") {
+                            HistoryScreen(
+                                interviews = savedInterviews,
+                                onAddInterview = { viewModel.addInterviewRecord(it) },
+                                onUpdateInterview = { viewModel.updateInterviewRecord(it) },
+                                onDeleteInterview = { viewModel.deleteInterviewRecord(it) },
+                                onBack = { navController.popBackStack() }
+                            )
+                        }
+
+                        composable("chat") {
+                            if (isVideoCallMode) {
+                                VideoCallScreen(
+                                    viewModel = viewModel,
+                                    onFinishSession = {
+                                        navController.navigate("feedback") {
+                                            popUpTo("setup")
+                                        }
+                                    }
+                                )
+                            } else {
+                                ChatScreen(
+                                    viewModel = viewModel,
+                                    onFinishSession = {
+                                        navController.navigate("feedback") {
+                                            popUpTo("setup")
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
                         composable("feedback") {
                             FeedbackScreen(
                                 viewModel = viewModel,
@@ -117,15 +140,6 @@ class MainActivity : ComponentActivity() {
                                         popUpTo("setup") { inclusive = true }
                                     }
                                 }
-                            )
-                        }
-                        composable("history") {
-                            HistoryScreen(
-                                interviews = savedInterviews,
-                                onAddInterview = { viewModel.addInterviewRecord(it) },
-                                onUpdateInterview = { viewModel.updateInterviewRecord(it) },
-                                onDeleteInterview = { viewModel.deleteInterviewRecord(it) },
-                                onBack = { navController.navigate("setup") }
                             )
                         }
                     }

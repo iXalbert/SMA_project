@@ -73,13 +73,13 @@ fun FeedbackScreen(
                             onClick = {
                                 val shareText = buildString {
                                     appendLine("📋 Raport Interview Trainer — ${config.role} (${config.experienceLevel})")
-                                    appendLine("🏆 Scor: ${rep.score}%")
+                                    appendLine("🏆 Scor CtCI: ${rep.score}%")
                                     appendLine("📝 Rezumat: ${rep.summary}")
                                     analytics?.let { a ->
-                                        appendLine("⏱ Timp mediu răspuns: ${a.averageSecondsPerAnswer}s • Ritm: ${a.wordsPerMinute} cuv/min • Cuvinte de umplutură: ${a.fillerWordsCount}")
+                                        appendLine("⏱ Medie răspuns: ${a.averageSecondsPerAnswer}s • Ritm: ${a.wordsPerMinute} cuv/min • Cuvinte umplutură: ${a.fillerWordsCount}")
                                     }
                                     videoReport?.let { v ->
-                                        appendLine("👁 Contact vizual: ${v.eyeContactScore}% • Postură: ${v.postureStabilityScore}% • Expresivitate: ${v.engagementScore}%")
+                                        appendLine("👁 Contact vizual: ${v.eyeContactScore}% • Postură umeri: ${v.postureStabilityScore}% • Gesticulație: ${v.handGestureScore}% • Expresivitate: ${v.engagementScore}%")
                                     }
                                 }
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -120,7 +120,7 @@ fun FeedbackScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Card 1: Scor General
+                // Card 1: Scor General CtCI
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -135,7 +135,7 @@ fun FeedbackScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (isEn) "OVERALL SCORE" else "SCOR GENERAL",
+                                text = if (isEn) "OVERALL SCORE (CtCI RUBRIC)" else "SCOR GENERAL (RUBRICĂ CtCI)",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.Bold
@@ -191,7 +191,7 @@ fun FeedbackScreen(
                     }
                 }
 
-                // Card 3: Analiză Video Nonverbală (TensorFlow Lite Face Landmarker)
+                // Card 3: Analiză Video Nonverbală (TensorFlow Lite: Face + Pose/Shoulders + Hands)
                 videoReport?.let { vReport ->
                     item {
                         Surface(
@@ -205,7 +205,7 @@ fun FeedbackScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Text(
-                                    text = if (isEn) "NON-VERBAL & BODY LANGUAGE (AI VISION)" else "LIMBAJ NONVERBAL & PREZENȚĂ (AI VISION)",
+                                    text = if (isEn) "NON-VERBAL & BODY LANGUAGE (TENSORFLOW LITE)" else "LIMBAJ NONVERBAL & POSTURĂ (TENSORFLOW LITE)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Bold
@@ -221,7 +221,11 @@ fun FeedbackScreen(
                                     )
                                     MetricMiniItem(
                                         value = "${vReport.postureStabilityScore}%",
-                                        label = if (isEn) "Posture" else "Postură Calmă"
+                                        label = if (isEn) "Shoulders" else "Postură Umeri"
+                                    )
+                                    MetricMiniItem(
+                                        value = "${vReport.handGestureScore}%",
+                                        label = if (isEn) "Gestures" else "Gesticulație"
                                     )
                                     MetricMiniItem(
                                         value = "${vReport.engagementScore}%",
@@ -251,8 +255,8 @@ fun FeedbackScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (isEn) "Tap a question to inspect keywords & ideal answer"
-                                else "Apasă pe o întrebare pentru cuvinte cheie și răspunsul ideal",
+                                text = if (isEn) "Tap a question to inspect CtCI criteria & ideal answer"
+                                else "Apasă pe o întrebare pentru criteriile CtCI și răspunsul ideal",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
