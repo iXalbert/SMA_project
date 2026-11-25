@@ -31,8 +31,7 @@ import java.util.Calendar
 @Composable
 fun SetupScreen(
     viewModel: InterviewViewModel,
-    onStartInterview: () -> Unit,
-    onOpenHistory: () -> Unit = {}
+    onStartInterview: () -> Unit
 ) {
     val rawGistUrl = "https://gist.githubusercontent.com/iXalbert/d6f75eebf201f1efa3b108e514c74061/raw/questions.json"
 
@@ -87,7 +86,6 @@ fun SetupScreen(
     val sessionModes = listOf("Antrenament", "Simulare (2 min)")
     var selectedMode by remember { mutableStateOf(sessionModes.first()) }
 
-    // Format Interviu: Scris + Audio (Chat) vs. Apel Video Live cu Amalia
     var isVideoCallSelected by remember { mutableStateOf(true) }
     val interviewerStyles = listOf("Friendly HR", "Tech Lead")
     var selectedStyle by remember { mutableStateOf(interviewerStyles.first()) }
@@ -157,7 +155,6 @@ fun SetupScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Card Întrebarea Zilei (Daily Warmup)
                 dailyQuestion?.let { dq ->
                     val isEn = selectedLanguage == "Engleză"
                     Surface(
@@ -221,7 +218,7 @@ fun SetupScreen(
                     }
                 }
 
-                // Card 1: Format Interviu (Scris + Audio vs. Apel Video Live cu Amalia)
+                // Card 1: Experiență Interviu
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -243,7 +240,6 @@ fun SetupScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            // Opțiunea A: Scris + Audio
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = if (!isVideoCallSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
@@ -273,7 +269,7 @@ fun SetupScreen(
                                         textAlign = TextAlign.Center
                                     )
                                     Text(
-                                        text = "Chat & dictare vocală",
+                                        text = "Chat & Dictare",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
@@ -281,7 +277,6 @@ fun SetupScreen(
                                 }
                             }
 
-                            // Opțiunea B: Apel Video Full-Screen cu Amalia
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = if (isVideoCallSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
@@ -305,13 +300,13 @@ fun SetupScreen(
                                         tint = if (isVideoCallSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = "Apel cu asistentul AI",
+                                        text = "Apel cu Asistenta AI",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.Center
                                     )
                                     Text(
-                                        text = "Video live + AI Vision",
+                                        text = "Video + Voce Live",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
@@ -330,9 +325,9 @@ fun SetupScreen(
                                 )
                                 Text(
                                     text = if (selectedStyle == "Tech Lead")
-                                        "Tech Lead: Cere obligatoriu complexitatea Big O și cazurile limită + analiză TensorFlow Lite (față, umeri, mâini)."
+                                        "Tech Lead: Cere obligatoriu complexitatea Big O și edge cases + analiză video live."
                                     else
-                                        "Friendly HR: Interviu conversațional cald + follow-up pe răspunsurile scurte + analiză nonverbală live.",
+                                        "Friendly HR: Conversație naturală cu Amalia + analiză postură și privire.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -382,7 +377,7 @@ fun SetupScreen(
                     }
                 }
 
-                // Card 3: Nivel, Limbă și Mod Simulare
+                // Card 3: Parametri sesiune
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -442,8 +437,6 @@ fun SetupScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
                 Button(
                     onClick = {
                         viewModel.updateConfig(
@@ -471,7 +464,7 @@ fun SetupScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isVideoCallSelected) "Apelează asistentul AI (Start)" else "Începe Interviul",
+                        text = if (isVideoCallSelected) "Apeleaza AI assistant (Start)" else "Începe Interviul",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )

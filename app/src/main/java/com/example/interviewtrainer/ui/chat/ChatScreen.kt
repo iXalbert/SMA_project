@@ -343,7 +343,7 @@ fun ChatScreen(
                                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                 ),
-                                modifier = Modifier.size(44.dp)
+                                modifier = Modifier.size(42.dp)
                             ) {
                                 Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu", modifier = Modifier.size(20.dp))
                             }
@@ -369,7 +369,7 @@ fun ChatScreen(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             ),
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(42.dp)
                         ) {
                             Icon(Icons.Default.Mic, contentDescription = "Dictare Vocală", modifier = Modifier.size(20.dp))
                         }
@@ -379,7 +379,7 @@ fun ChatScreen(
                             onValueChange = { userText = it },
                             placeholder = {
                                 Text(
-                                    text = if (isEn) "Type or dictate answer..." else "Scrie sau dictează...",
+                                    text = if (isEn) "Type or dictate..." else "Scrie sau dictează...",
                                     style = MaterialTheme.typography.bodyMedium
                                 )
                             },
@@ -395,7 +395,7 @@ fun ChatScreen(
                             },
                             enabled = userText.isNotBlank() && !isLoading,
                             shape = CircleShape,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(42.dp)
                         ) {
                             Icon(Icons.Default.Send, contentDescription = "Trimite", modifier = Modifier.size(18.dp))
                         }

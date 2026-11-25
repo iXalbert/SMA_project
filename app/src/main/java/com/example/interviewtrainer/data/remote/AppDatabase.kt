@@ -10,7 +10,7 @@ import com.example.interviewtrainer.data.model.InterviewEntity
 
 @Database(
     entities = [InterviewEntity::class, BookmarkedQuestionEntity::class, CustomQuestionEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

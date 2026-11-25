@@ -45,6 +45,9 @@ class BodyLanguageAnalyzer(
     private var poseLandmarker: PoseLandmarker? = null
     private var handLandmarker: HandLandmarker? = null
 
+    @Volatile
+    private var isClosed = false
+
     private var totalFrames = 0
     private var eyeContactFrames = 0
     private var alignedShouldersFrames = 0
@@ -98,7 +101,13 @@ class BodyLanguageAnalyzer(
         }
     }
 
+    @Synchronized
     override fun analyze(imageProxy: ImageProxy) {
+        if (isClosed) {
+            imageProxy.close()
+            return
+        }
+
         val now = SystemClock.uptimeMillis()
         if (now - lastProcessedTime < 220L) {
             imageProxy.close()
@@ -130,7 +139,6 @@ class BodyLanguageAnalyzer(
 
             totalFrames++
 
-            // 1. Contact vizual (Face Landmarker)
             val nose = faceLandmarks[1]
             val leftCheek = faceLandmarks[234]
             val rightCheek = faceLandmarks[454]
@@ -148,7 +156,6 @@ class BodyLanguageAnalyzer(
             val isLookingAtCamera = horizontalOffset < 0.16f && verticalOffset < 0.18f
             if (isLookingAtCamera) eyeContactFrames++
 
-            // 2. Postura umerilor (Pose Landmarker: 11 = umăr stâng, 12 = umăr drept)
             var shouldersOk = true
             val poseLandmarks = poseResult?.landmarks()?.firstOrNull()
             if (poseLandmarks != null && poseLandmarks.size > 12) {
@@ -170,7 +177,6 @@ class BodyLanguageAnalyzer(
             }
             if (shouldersOk) alignedShouldersFrames++
 
-            // 3. Mișcarea mâinilor & atingerea nervoasă a feței (Hand Landmarker)
             val hands = handResult?.landmarks().orEmpty()
             val handsVisible = hands.isNotEmpty()
             if (handsVisible) handsDetectedFrames++
@@ -186,7 +192,6 @@ class BodyLanguageAnalyzer(
                 }
             }
 
-            // 4. Expresivitate / Engagement (Face Blendshapes)
             var frameEngagement = 0.65f
             val blendshapes = faceResult.faceBlendshapes().orElse(null)?.firstOrNull()
             if (blendshapes != null) {
@@ -240,40 +245,36 @@ class BodyLanguageAnalyzer(
         val tipsRo = mutableListOf<String>()
         val tipsEn = mutableListOf<String>()
 
-        // 1. Contact vizual
         if (eyeScore >= 75) {
             tipsRo.add("✓ Contact vizual excelent ($eyeScore%) — ai transmis încredere.")
             tipsEn.add("✓ Excellent eye contact ($eyeScore%) — projected confidence.")
         } else {
-            tipsRo.add("• Îmbunătățire Contact Vizual ($eyeScore%): Privește direct spre camera frontală când explici soluția, nu în jos spre ecran.")
-            tipsEn.add("• Improve Eye Contact ($eyeScore%): Look directly at the front camera lens while explaining instead of looking down.")
+            tipsRo.add("• Contact Vizual ($eyeScore%): Privește direct spre camera frontală când explici soluția.")
+            tipsEn.add("• Eye Contact ($eyeScore%): Look directly at the front camera lens while explaining.")
         }
 
-        // 2. Postura umerilor
         if (postureScore >= 75) {
             tipsRo.add("✓ Postură stabilă a umerilor ($postureScore%).")
             tipsEn.add("✓ Steady, aligned shoulder posture ($postureScore%).")
         } else {
-            tipsRo.add("• Îmbunătățire Postură ($postureScore%): Păstrează umerii drepți și evită balansul trunchiului când te gândești la răspuns.")
-            tipsEn.add("• Improve Posture ($postureScore%): Keep shoulders level and avoid swaying while thinking.")
+            tipsRo.add("• Postură ($postureScore%): Păstrează umerii drepți și evită balansul trunchiului.")
+            tipsEn.add("• Posture ($postureScore%): Keep shoulders level and avoid swaying while thinking.")
         }
 
-        // 3. Gesticulația mâinilor & atingerea feței
         if (faceTouchCount > 2) {
-            tipsRo.add("• Control Gesturi: Ai dus mâna la față de $faceTouchCount ori (semn de stres). Ține mâinile relaxate sau folosește gesturi deschise.")
-            tipsEn.add("• Gesture Control: You touched your face $faceTouchCount times (stress cue). Keep hands relaxed or use open gestures.")
+            tipsRo.add("• Control Gesturi: Ai dus mâna la față de $faceTouchCount ori — folosește gesturi deschise.")
+            tipsEn.add("• Gesture Control: You touched your face $faceTouchCount times — use open hand gestures.")
         } else if (gestureRatio < 0.15f) {
-            tipsRo.add("• Gesticulație ($gestureScore%): Încadrează telefonul puțin mai departe ca să îți folosești natural mâinile când explici arhitectura/algoritmul.")
-            tipsEn.add("• Hand Gestures ($gestureScore%): Place the camera slightly further so natural hand gestures support your explanation.")
+            tipsRo.add("• Gesticulație ($gestureScore%): Încadrează telefonul puțin mai departe pentru a folosi natural mâinile.")
+            tipsEn.add("• Hand Gestures ($gestureScore%): Place camera slightly further to include natural hand gestures.")
         } else {
             tipsRo.add("✓ Gesticulație echilibrată ($gestureScore%) pe parcursul explicațiilor.")
             tipsEn.add("✓ Balanced hand gestures ($gestureScore%) during explanations.")
         }
 
-        // 4. Expresivitate facială (Blendshapes)
         if (engagementScore < 70) {
-            tipsRo.add("• Expresivitate ($engagementScore%): Încearcă un ton facial mai deschis și un zâmbet ușor la începutul și finalul răspunsului.")
-            tipsEn.add("• Engagement ($engagementScore%): Try a warmer facial expression and a slight smile when greeting and concluding.")
+            tipsRo.add("• Expresivitate ($engagementScore%): Încearcă un ton facial mai deschis și un zâmbet ușor.")
+            tipsEn.add("• Engagement ($engagementScore%): Try a warmer facial expression and a slight smile.")
         }
 
         return VideoSessionReport(
@@ -288,7 +289,9 @@ class BodyLanguageAnalyzer(
         )
     }
 
+    @Synchronized
     fun close() {
+        isClosed = true
         try { faceLandmarker?.close() } catch (_: Exception) {}
         try { poseLandmarker?.close() } catch (_: Exception) {}
         try { handLandmarker?.close() } catch (_: Exception) {}

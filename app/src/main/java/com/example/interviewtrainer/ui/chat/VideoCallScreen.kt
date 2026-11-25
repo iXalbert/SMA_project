@@ -43,7 +43,6 @@ import com.example.interviewtrainer.utils.BodyLanguageAnalyzer
 import com.example.interviewtrainer.utils.LiveVideoMetrics
 import com.example.interviewtrainer.utils.VoiceHelper
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
-import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 
 @Composable
@@ -61,10 +60,10 @@ fun VideoCallScreen(
 
     var hasCameraPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                    PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+
     var liveMetrics by remember { mutableStateOf(LiveVideoMetrics()) }
     var showQuickTextInput by remember { mutableStateOf(false) }
     var draftAnswer by remember { mutableStateOf("") }
@@ -98,13 +97,9 @@ fun VideoCallScreen(
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            if (!matches.isNullOrEmpty()) {
-                val spoken = matches[0]
-                if (showQuickTextInput) {
-                    draftAnswer = if (draftAnswer.isBlank()) spoken else "$draftAnswer $spoken"
-                } else {
-                    viewModel.sendMessage(spoken)
-                }
+            val spoken = matches?.firstOrNull().orEmpty().trim()
+            if (spoken.isNotBlank()) {
+                viewModel.sendMessage(spoken)
             }
         }
     }
@@ -122,10 +117,7 @@ fun VideoCallScreen(
 
     LaunchedEffect(lastInterviewerMessage?.text) {
         lastInterviewerMessage?.text?.let { text ->
-            isAmaliaSpeaking = true
             voiceHelper.speak(text, config.language)
-            delay(2500L)
-            isAmaliaSpeaking = false
         }
     }
 
@@ -185,15 +177,6 @@ fun VideoCallScreen(
                 },
                 modifier = Modifier.fillMaxSize()
             )
-        } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Button(onClick = { cameraPermissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                    Text(if (isEn) "Enable Camera for Video Call" else "Activează Camera pentru Apel Video")
-                }
-            }
         }
 
         Box(
@@ -205,7 +188,7 @@ fun VideoCallScreen(
                             Color.Black.copy(alpha = 0.72f),
                             Color.Transparent,
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.85f)
+                            Color.Black.copy(alpha = 0.88f)
                         )
                     )
                 )
@@ -254,29 +237,12 @@ fun VideoCallScreen(
                         }
 
                         Column {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "Amalia",
-                                    color = Color.White,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFF16A34A)
-                                ) {
-                                    Text(
-                                        text = "LIVE AI",
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
+                            Text(
+                                text = "Amalia",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
                             Text(
                                 text = "$interviewerStyle • ${config.role}",
                                 color = Color(0xFFCBD5E1),
@@ -305,7 +271,7 @@ fun VideoCallScreen(
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 175.dp)
+                    .heightIn(max = 165.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -355,7 +321,7 @@ fun VideoCallScreen(
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
                 shape = CircleShape,
@@ -363,20 +329,20 @@ fun VideoCallScreen(
                 border = BorderStroke(1.5.dp, statusBadgeColor)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(9.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
                             .background(statusBadgeColor)
                     )
                     Text(
                         text = if (isEn) liveMetrics.statusLabelEn else liveMetrics.statusLabelRo,
                         color = Color.White,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -433,7 +399,7 @@ fun VideoCallScreen(
                         containerColor = Color.White.copy(alpha = 0.18f),
                         contentColor = Color(0xFFFDE047)
                     ),
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu")
                 }
@@ -444,11 +410,11 @@ fun VideoCallScreen(
                             val intent = voiceHelper.createSpeechIntent(config.language)
                             speechLauncher.launch(intent)
                         } catch (e: ActivityNotFoundException) {
-                            val sim = if (isEn)
-                                "I would use a hash table to achieve O(1) lookup time, handling null edge cases."
+                            val simulated = if (isEn)
+                                "I would use a HashMap for O(1) lookup and validate edge cases first."
                             else
-                                "Aș folosi un HashMap pentru complexitate O(1) în timp și aș trata cazurile limită null."
-                            viewModel.sendMessage(sim)
+                                "Aș folosi un HashMap pentru căutare în O(1) și aș valida întâi cazurile limită."
+                            viewModel.sendMessage(simulated)
                             Toast.makeText(context, "Răspuns vocal simulat (Emulator)", Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -456,12 +422,12 @@ fun VideoCallScreen(
                         containerColor = Color(0xFF2563EB),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(68.dp)
+                    modifier = Modifier.size(64.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Mic,
                         contentDescription = "Răspunde vocal",
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(30.dp)
                     )
                 }
 
@@ -471,7 +437,7 @@ fun VideoCallScreen(
                         containerColor = Color.White.copy(alpha = 0.18f),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(52.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(Icons.Default.Keyboard, contentDescription = "Tastatură")
                 }
@@ -486,12 +452,12 @@ fun VideoCallScreen(
                         containerColor = Color(0xFFDC2626),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(54.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.CallEnd,
                         contentDescription = "Încheie apelul",
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }

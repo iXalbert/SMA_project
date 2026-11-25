@@ -38,6 +38,7 @@ fun FeedbackScreen(
     val report by viewModel.report.collectAsState()
     val analytics by viewModel.sessionAnalytics.collectAsState()
     val videoReport by viewModel.videoReport.collectAsState()
+    val voiceMetrics by viewModel.voiceMetricsReport.collectAsState()
     val config by viewModel.config.collectAsState()
     val isEn = config.language == "Engleză"
 
@@ -79,7 +80,10 @@ fun FeedbackScreen(
                                         appendLine("⏱ Medie răspuns: ${a.averageSecondsPerAnswer}s • Ritm: ${a.wordsPerMinute} cuv/min • Cuvinte umplutură: ${a.fillerWordsCount}")
                                     }
                                     videoReport?.let { v ->
-                                        appendLine("👁 Contact vizual: ${v.eyeContactScore}% • Postură umeri: ${v.postureStabilityScore}% • Gesticulație: ${v.handGestureScore}% • Expresivitate: ${v.engagementScore}%")
+                                        appendLine("👁 Contact vizual: ${v.eyeContactScore}% • Postură umeri: ${v.postureStabilityScore}% • Gesticulație: ${v.handGestureScore}%")
+                                    }
+                                    voiceMetrics?.let { vm ->
+                                        appendLine("🎙 Încredere voce: ${vm.confidenceScore}% • Inflexiune: ${vm.inflectionScore}%")
                                     }
                                 }
                                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -191,7 +195,49 @@ fun FeedbackScreen(
                     }
                 }
 
-                // Card 3: Analiză Video Nonverbală (TensorFlow Lite: Face + Pose/Shoulders + Hands)
+                // Card 3: Analiză Vocală (Inflexiune & Încredere)
+                voiceMetrics?.let { vm ->
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = if (isEn) "VOCAL CONFIDENCE & INFLECTION" else "ANALIZĂ VOCALĂ (INFLEXIUNE & ÎNCREDERE)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly
+                                ) {
+                                    MetricMiniItem(
+                                        value = "${vm.confidenceScore}%",
+                                        label = if (isEn) "Voice Confidence" else "Încredere Voce"
+                                    )
+                                    MetricMiniItem(
+                                        value = "${vm.inflectionScore}%",
+                                        label = if (isEn) "Inflection" else "Inflexiune"
+                                    )
+                                }
+                                Text(
+                                    text = if (isEn) vm.feedbackEn else vm.feedbackRo,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Card 4: Analiză Video Nonverbală (TensorFlow Lite)
                 videoReport?.let { vReport ->
                     item {
                         Surface(
@@ -245,7 +291,6 @@ fun FeedbackScreen(
                     }
                 }
 
-                // Lista de întrebări și răspunsuri (Master-Detail)
                 if (currentReport.reviews.isNotEmpty()) {
                     item {
                         Column(modifier = Modifier.padding(top = 4.dp)) {

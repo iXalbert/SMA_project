@@ -8,6 +8,7 @@ import com.example.interviewtrainer.data.remote.AppDatabase
 import com.example.interviewtrainer.data.repository.InterviewRepository
 import com.example.interviewtrainer.utils.CtciRubricEvaluator
 import com.example.interviewtrainer.utils.VideoSessionReport
+import com.example.interviewtrainer.utils.VoiceConfidenceMetrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +53,17 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _interviewerStyle = MutableStateFlow("Friendly HR")
     val interviewerStyle: StateFlow<String> = _interviewerStyle.asStateFlow()
+
+    // Proprietăți/metode păstrate inactive ca să nu dea eroare fișierele noi până mâine
+    private val _geminiApiKey = MutableStateFlow("")
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+    fun setGeminiApiKey(key: String) { _geminiApiKey.value = key.trim() }
+
+    private val _voiceMetricsReport = MutableStateFlow<VoiceConfidenceMetrics?>(null)
+    val voiceMetricsReport: StateFlow<VoiceConfidenceMetrics?> = _voiceMetricsReport.asStateFlow()
+    fun recordVoiceMetrics(metrics: VoiceConfidenceMetrics) {}
+    fun startCustomCvInterview(cvOrJobText: String, targetRole: String, onReady: () -> Unit) {}
+    fun startSpacedRepetitionInterview(weakQuestions: List<QuestionDto>, onReady: () -> Unit) {}
 
     private val _sessionAnalytics = MutableStateFlow<SessionAnalytics?>(null)
     val sessionAnalytics: StateFlow<SessionAnalytics?> = _sessionAnalytics.asStateFlow()
@@ -138,18 +150,13 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
         _interviewerStyle.value = interviewerStyle
     }
 
-    fun setInterviewMode(videoCall: Boolean, style: String = _interviewerStyle.value) {
-        _isVideoCallMode.value = videoCall
-        _interviewerStyle.value = style
-    }
-
     fun startInterview(rawGistUrl: String) {
         hintedQuestionIds.clear()
         followUpAskedForCurrentQuestion = false
         _videoReport.value = null
+        _voiceMetricsReport.value = null
         answerDurationsSec.clear()
         _sessionAnalytics.value = null
-        questionAskedTimestamp = System.currentTimeMillis()
 
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
@@ -207,6 +214,7 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
 
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
+
             val isEn = _config.value.language == "Engleză"
             val wordCount = userText.trim().split(Regex("""\s+""")).size
             val lower = userText.lowercase()
@@ -237,8 +245,8 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
             }
 
             followUpAskedForCurrentQuestion = false
-            val (aiText, qData) = repository.sendMessage(userText, _config.value)
 
+            val (aiText, qData) = repository.sendMessage(userText, _config.value)
             val updatedList = _messages.value.toMutableList()
             updatedList.add(ChatMessage(text = aiText, role = MessageRole.INTERVIEWER, questionData = qData))
             _messages.value = updatedList
@@ -248,17 +256,21 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun requestHint() {
-        val hintText = repository.getHintForCurrentQuestion(_config.value.language)
-        if (hintText.isNotBlank()) {
-            val lastQuestionId = _messages.value
-                .lastOrNull { it.role == MessageRole.INTERVIEWER && it.questionData != null }
-                ?.questionData?.id
-            if (lastQuestionId != null) {
-                hintedQuestionIds.add(lastQuestionId)
-            }
+        val lastQuestion = _messages.value
+            .lastOrNull { it.role == MessageRole.INTERVIEWER && it.questionData != null }
+            ?.questionData
 
+        val isEn = _config.value.language == "Engleză"
+        val hintText = if (lastQuestion != null) {
+            hintedQuestionIds.add(lastQuestion.id)
+            if (isEn) lastQuestion.hintEn else lastQuestion.hintRo
+        } else {
+            repository.getHintForCurrentQuestion(_config.value.language)
+        }
+
+        if (hintText.isNotBlank()) {
             val currentList = _messages.value.toMutableList()
-            val hintPrefix = if (_config.value.language == "Engleză") "💡 CtCI Hint: " else "💡 Indiciu CtCI: "
+            val hintPrefix = if (isEn) "💡 CtCI Hint: " else "💡 Indiciu CtCI: "
             currentList.add(ChatMessage(text = hintPrefix + hintText, role = MessageRole.HINT))
             _messages.value = currentList
         }
@@ -267,105 +279,145 @@ class InterviewViewModel(application: Application) : AndroidViewModel(applicatio
     fun finishInterview(onFinished: () -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
-            val isEn = _config.value.language == "Engleză"
+            try {
+                val isEn = _config.value.language == "Engleză"
+                val userMsgs = _messages.value.filter { it.role == MessageRole.USER }
 
-            val baseReport = repository.generateReport(_messages.value, _config.value.language)
-
-            val askedQuestionIds = _messages.value
-                .filter { it.role == MessageRole.INTERVIEWER && it.questionData != null }
-                .mapNotNull { it.questionData?.id }
-
-            var ctciTotalScore = 0
-            val enhancedReviews = baseReport.reviews.mapIndexed { idx, rev ->
-                val allKeywords = rev.matchedKeywords + rev.missedKeywords
-                val qId = askedQuestionIds.getOrNull(idx)
-                val wasHintUsed = qId != null && hintedQuestionIds.contains(qId)
-
-                val ctciEval = CtciRubricEvaluator.evaluateAnswer(
-                    userAnswer = rev.userResponse,
-                    referenceAnswer = rev.referenceAnswer,
-                    keywords = allKeywords,
-                    usedHint = wasHintUsed
-                )
-
-                ctciTotalScore += ctciEval.score
-
-                val rubricHeader = if (isEn) ctciEval.rubricSummaryEn else ctciEval.rubricSummaryRo
-                val updatedTip = buildString {
-                    append(rubricHeader)
-                    if (!rev.interviewerTip.isNullOrBlank()) {
-                        append("\n\n")
-                        append(rev.interviewerTip)
+                val baseReport = if (userMsgs.isNotEmpty()) {
+                    try {
+                        repository.generateReport(_messages.value, _config.value.language)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        null
                     }
+                } else null
+
+                val reviewsToEvaluate = baseReport?.reviews.orEmpty()
+
+                val askedQuestionIds = _messages.value
+                    .filter { it.role == MessageRole.INTERVIEWER && it.questionData != null }
+                    .mapNotNull { it.questionData?.id }
+
+                var totalScoreSum = 0
+                val enhancedReviews = reviewsToEvaluate.mapIndexed { idx, rev ->
+                    val allKeywords = rev.matchedKeywords + rev.missedKeywords
+                    val qId = askedQuestionIds.getOrNull(idx)
+                    val wasHintUsed = qId != null && hintedQuestionIds.contains(qId)
+
+                    val ctciEval = CtciRubricEvaluator.evaluateAnswer(
+                        userAnswer = rev.userResponse,
+                        referenceAnswer = rev.referenceAnswer,
+                        keywords = allKeywords,
+                        usedHint = wasHintUsed
+                    )
+
+                    totalScoreSum += ctciEval.score
+
+                    val rubricHeader = if (isEn) ctciEval.rubricSummaryEn else ctciEval.rubricSummaryRo
+                    val updatedTip = if (!rev.interviewerTip.isNullOrBlank()) {
+                        "$rubricHeader\n\n${rev.interviewerTip}"
+                    } else {
+                        rubricHeader
+                    }
+
+                    rev.copy(
+                        matchedKeywords = ctciEval.matchedKeywords,
+                        missedKeywords = ctciEval.missedKeywords,
+                        interviewerTip = updatedTip
+                    )
                 }
 
-                rev.copy(
-                    matchedKeywords = ctciEval.matchedKeywords,
-                    missedKeywords = ctciEval.missedKeywords,
-                    interviewerTip = updatedTip
+                val finalScore = if (enhancedReviews.isNotEmpty()) {
+                    (totalScoreSum / enhancedReviews.size).coerceIn(0, 100)
+                } else 0
+
+                val baseSummary = when {
+                    enhancedReviews.isEmpty() -> if (isEn)
+                        "Session ended before answering any questions."
+                    else
+                        "Sesiune încheiată fără răspunsuri înregistrate."
+                    finalScore >= 80 -> if (isEn)
+                        "Strong performance! Solid technical depth, Big O awareness, and clear communication."
+                    else
+                        "Performanță excelentă! Profunzime tehnică, analiză Big O și comunicare clară."
+                    finalScore >= 50 -> if (isEn)
+                        "Good foundation. Focus more on edge cases and explicit time/space complexity."
+                    else
+                        "Bază bună. Insistă mai mult pe cazurile limită și complexitatea timp/spațiu."
+                    else -> if (isEn)
+                        "Needs more practice on core concepts and structured explanations."
+                    else
+                        "Necesită exercițiu suplimentar pe conceptele de bază și structurarea răspunsului."
+                }
+
+                val videoNote = _videoReport.value?.let { v ->
+                    if (isEn) " | Eye contact: ${v.eyeContactScore}%, Shoulders: ${v.postureStabilityScore}%, Gestures: ${v.handGestureScore}%"
+                    else " | Contact vizual: ${v.eyeContactScore}%, Umeri: ${v.postureStabilityScore}%, Gesticulație: ${v.handGestureScore}%"
+                } ?: ""
+
+                val derivedStrengths = enhancedReviews
+                    .flatMap { it.matchedKeywords }
+                    .distinct()
+                    .ifEmpty { baseReport?.strengths ?: listOf(if (isEn) "Clear communication" else "Comunicare clară") }
+
+                val derivedImprovements = enhancedReviews
+                    .flatMap { it.missedKeywords }
+                    .distinct()
+                    .ifEmpty { baseReport?.improvements ?: listOf(if (isEn) "Explicit Big O & edge cases" else "Analiză explicită Big O și edge cases") }
+
+                val finalReport = InterviewReport(
+                    score = finalScore,
+                    summary = baseSummary + videoNote,
+                    strengths = derivedStrengths,
+                    improvements = derivedImprovements,
+                    reviews = enhancedReviews
                 )
-            }
+                _report.value = finalReport
 
-            val finalScore = if (enhancedReviews.isNotEmpty()) {
-                (ctciTotalScore / enhancedReviews.size).coerceIn(0, 100)
-            } else {
-                baseReport.score
-            }
+                try {
+                    dao.insertInterview(
+                        InterviewEntity(
+                            domain = "${_config.value.domain} - ${_config.value.specialization}",
+                            role = _config.value.role,
+                            level = _config.value.experienceLevel,
+                            score = finalReport.score,
+                            summary = finalReport.summary,
+                            detailsJson = finalReport.reviews.toDetailsJson()
+                        )
+                    )
+                } catch (dbEx: Exception) {
+                    dbEx.printStackTrace()
+                }
 
-            val videoNote = _videoReport.value?.let { v ->
-                if (isEn) " | Eye contact: ${v.eyeContactScore}%, Shoulders: ${v.postureStabilityScore}%, Gestures: ${v.handGestureScore}%"
-                else " | Contact vizual: ${v.eyeContactScore}%, Umeri: ${v.postureStabilityScore}%, Gesticulație: ${v.handGestureScore}%"
-            } ?: ""
+                val allWords = userMsgs
+                    .map { it.text }
+                    .flatMap { it.lowercase().split(Regex("""[^a-zA-ZăâîșțĂÂÎȘȚ0-9]+""")) }
+                    .filter { it.isNotBlank() }
 
-            val finalSummary = baseReport.summary + videoNote
-
-            val finalReport = baseReport.copy(
-                score = finalScore,
-                summary = finalSummary,
-                reviews = enhancedReviews
-            )
-            _report.value = finalReport
-
-            dao.insertInterview(
-                InterviewEntity(
-                    domain = "${_config.value.domain} - ${_config.value.specialization}",
-                    role = _config.value.role,
-                    level = _config.value.experienceLevel,
-                    score = finalReport.score,
-                    summary = finalReport.summary,
-                    detailsJson = finalReport.reviews.toDetailsJson()
+                val fillerDictionary = setOf(
+                    "ăăă", "aaa", "gen", "practic", "deci", "cumva", "efectiv",
+                    "like", "basically", "actually", "literally", "um", "uh"
                 )
-            )
+                val foundFillers = allWords.filter { it in fillerDictionary }
 
-            val userResponses = _messages.value
-                .filter { it.role == MessageRole.USER }
-                .map { it.text }
+                val totalSeconds = answerDurationsSec.sum().coerceAtLeast(1)
+                val avgSeconds = if (answerDurationsSec.isNotEmpty()) totalSeconds / answerDurationsSec.size else 0
+                val wpm = ((allWords.size.toDouble() / totalSeconds.toDouble()) * 60.0).toInt().coerceIn(0, 300)
 
-            val allWords = userResponses
-                .flatMap { it.lowercase().split(Regex("""[^a-zA-ZăâîșțĂÂÎȘȚ0-9]+""")) }
-                .filter { it.isNotBlank() }
-
-            val fillerDictionary = setOf(
-                "ăăă", "aaa", "gen", "practic", "deci", "cumva", "efectiv",
-                "like", "basically", "actually", "literally", "um", "uh"
-            )
-            val foundFillers = allWords.filter { it in fillerDictionary }
-
-            val totalSeconds = answerDurationsSec.sum().coerceAtLeast(1)
-            val avgSeconds = if (answerDurationsSec.isNotEmpty()) totalSeconds / answerDurationsSec.size else 0
-            val wpm = ((allWords.size.toDouble() / totalSeconds.toDouble()) * 60.0).toInt().coerceIn(0, 300)
-
-            _sessionAnalytics.value = SessionAnalytics(
-                averageSecondsPerAnswer = avgSeconds,
-                wordsPerMinute = wpm,
-                fillerWordsCount = foundFillers.size,
-                detectedFillers = foundFillers.distinct(),
-                isTimedMode = _isTimedMode.value
-            )
-
-            _isLoading.value = false
-            withContext(Dispatchers.Main) {
-                onFinished()
+                _sessionAnalytics.value = SessionAnalytics(
+                    averageSecondsPerAnswer = avgSeconds,
+                    wordsPerMinute = wpm,
+                    fillerWordsCount = foundFillers.size,
+                    detectedFillers = foundFillers.distinct(),
+                    isTimedMode = _isTimedMode.value
+                )
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                _isLoading.value = false
+                withContext(Dispatchers.Main) {
+                    onFinished()
+                }
             }
         }
     }
