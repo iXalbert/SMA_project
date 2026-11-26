@@ -4,16 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -26,31 +17,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,7 +61,6 @@ fun HistoryScreen(
 
     val selectedInterview = interviews.find { it.id == selectedInterviewId }
 
-    // Extragem întrebările cu cuvinte-cheie ratate folosind extensia de pe InterviewEntity
     val weakQuestions = remember(interviews) {
         interviews
             .flatMap { it.toQuestionReviews() }
@@ -173,7 +140,6 @@ fun HistoryScreen(
             }
         ) { padding ->
             when (selectedTab) {
-                // TAB 1: Sesiuni (lista completă + statistici + CRUD)
                 0 -> {
                     if (interviews.isEmpty()) {
                         Box(
@@ -262,7 +228,7 @@ fun HistoryScreen(
 
                             item {
                                 Text(
-                                    text = "Apasă pe un interviu pentru a vedea întrebările și răspunsurile",
+                                    text = "Apasă pe un interviu pentru a vedea întrebările, răspunsurile și recomandările",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -278,7 +244,6 @@ fun HistoryScreen(
                     }
                 }
 
-                // TAB 2: Grafice Progres (Compose Canvas)
                 1 -> {
                     val chronological = remember(interviews) {
                         interviews.sortedBy { it.timestamp }.takeLast(10)
@@ -383,7 +348,6 @@ fun HistoryScreen(
                     }
                 }
 
-                // TAB 3: Repetiție Spațiată (antrenament țintit pe întrebările cu lacune)
                 2 -> {
                     Column(
                         modifier = Modifier
@@ -584,7 +548,7 @@ fun CompactHistoryCard(
                     text = interview.summary,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -598,7 +562,7 @@ fun CompactHistoryCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HistoryDetailScreen(
     interview: InterviewEntity,
@@ -608,6 +572,13 @@ fun HistoryDetailScreen(
 ) {
     val reviews = remember(interview.detailsJson) { interview.toQuestionReviews() }
     var selectedReviewPair by remember { mutableStateOf<Pair<Int, QuestionReview>?>(null) }
+
+    val strengths = remember(reviews) {
+        reviews.flatMap { it.matchedKeywords }.distinct()
+    }
+    val improvements = remember(reviews) {
+        reviews.flatMap { it.missedKeywords }.distinct()
+    }
 
     selectedReviewPair?.let { (index, review) ->
         BackHandler { selectedReviewPair = null }
@@ -701,16 +672,86 @@ fun HistoryDetailScreen(
                 }
             }
 
+            if (strengths.isNotEmpty() || improvements.isNotEmpty()) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (strengths.isNotEmpty()) {
+                                Text(
+                                    text = "✓ Puncte tari",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF16A34A)
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    strengths.forEach { kw ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFDCFCE7)
+                                        ) {
+                                            Text(
+                                                text = kw,
+                                                color = Color(0xFF166534),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (improvements.isNotEmpty()) {
+                                Text(
+                                    text = "⚡ Ce poți îmbunătăți",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFD97706)
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    improvements.forEach { kw ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFFEF3C7)
+                                        ) {
+                                            Text(
+                                                text = kw,
+                                                color = Color(0xFF92400E),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (reviews.isNotEmpty()) {
                 item {
                     Column(modifier = Modifier.padding(top = 4.dp)) {
                         Text(
-                            text = "Întrebări și Răspunsuri",
+                            text = "Întrebări și Răspunsuri (${reviews.size})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Apasă pe o întrebare pentru cuvinte cheie și răspunsul ideal",
+                            text = "Apasă pe o întrebare pentru răspunsul tău, cuvinte cheie și răspunsul ideal",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

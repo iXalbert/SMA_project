@@ -25,6 +25,7 @@ import com.example.interviewtrainer.ui.chat.ChatScreen
 import com.example.interviewtrainer.ui.chat.VideoCallScreen
 import com.example.interviewtrainer.ui.feedback.FeedbackScreen
 import com.example.interviewtrainer.ui.history.HistoryScreen
+import com.example.interviewtrainer.ui.setup.CvJobGeneratorScreen
 import com.example.interviewtrainer.ui.setup.SetupScreen
 import com.example.interviewtrainer.ui.theme.AIInterviewTrainerTheme
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
@@ -92,6 +93,21 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onStartInterview = {
                                     navController.navigate("chat")
+                                },
+                                onOpenCvGenerator = {
+                                    navController.navigate("cv_generator")
+                                }
+                            )
+                        }
+
+                        composable("cv_generator") {
+                            CvJobGeneratorScreen(
+                                viewModel = viewModel,
+                                onBack = { navController.popBackStack() },
+                                onInterviewGenerated = {
+                                    navController.navigate("chat") {
+                                        popUpTo("setup")
+                                    }
                                 }
                             )
                         }
@@ -106,7 +122,12 @@ class MainActivity : ComponentActivity() {
                                 onAddInterview = { viewModel.addInterviewRecord(it) },
                                 onUpdateInterview = { viewModel.updateInterviewRecord(it) },
                                 onDeleteInterview = { viewModel.deleteInterviewRecord(it) },
-                                onBack = { navController.popBackStack() }
+                                onBack = { navController.popBackStack() },
+                                onStartSpacedRepetition = { weakQuestions ->
+                                    viewModel.startSpacedRepetitionInterview(weakQuestions) {
+                                        navController.navigate("chat")
+                                    }
+                                }
                             )
                         }
 

@@ -32,8 +32,6 @@ class InterviewRepository {
         val role = spec?.roles?.find { it.title == config.role }
 
         val remoteQuestions = role?.questions ?: emptyList()
-        val allQuestions = customQuestions + remoteQuestions
-
         currentSessionQuestions = (customQuestions + remoteQuestions.shuffled()).take(config.questionLimit)
         questionIndex = 0
 
@@ -60,8 +58,8 @@ class InterviewRepository {
         return if (questionIndex < currentSessionQuestions.size) {
             val qNext = currentSessionQuestions[questionIndex]
             val qText = if (isEn) qNext.questionEn else qNext.questionRo
-            val text = if (isEn) "Thank you.\n\nQuestion #${questionIndex + 1}:$qText"
-            else "Am înregistrat răspunsul tău.\n\nÎntrebarea #${questionIndex + 1}:$qText"
+            val text = if (isEn) "Thank you.\n\nQuestion #${questionIndex + 1}: $qText"
+            else "Am înregistrat răspunsul tău.\n\nÎntrebarea #${questionIndex + 1}: $qText"
             Pair(text, qNext)
         } else {
             val text = if (isEn) "You have completed all questions! Click 'Finish' to view your report."
@@ -88,12 +86,41 @@ class InterviewRepository {
             )
         }
 
+        // Grupăm fiecare întrebare (questionData != null) cu toate răspunsurile user-ului date până la următoarea întrebare
+        val pairedEntries = mutableListOf<Pair<QuestionDto, String>>()
+        var activeQuestion: QuestionDto? = null
+        val activeAnswers = mutableListOf<String>()
+
+        for (msg in messages) {
+            if (msg.role == MessageRole.INTERVIEWER && msg.questionData != null) {
+                if (activeQuestion != null && activeAnswers.isNotEmpty()) {
+                    pairedEntries.add(activeQuestion to activeAnswers.joinToString("\n"))
+                }
+                activeQuestion = msg.questionData
+                activeAnswers.clear()
+            } else if (msg.role == MessageRole.USER && activeQuestion != null) {
+                activeAnswers.add(msg.text.trim())
+            }
+        }
+        if (activeQuestion != null && activeAnswers.isNotEmpty()) {
+            pairedEntries.add(activeQuestion to activeAnswers.joinToString("\n"))
+        }
+
+        // Fallback dacă mesajele nu au avut questionData atașat
+        val finalPairs: List<Pair<QuestionDto, String>> = if (pairedEntries.isNotEmpty()) {
+            pairedEntries
+        } else {
+            currentSessionQuestions.mapIndexedNotNull { idx, q ->
+                val ans = userMessages.getOrNull(idx)?.text ?: return@mapIndexedNotNull null
+                q to ans
+            }
+        }
+
         var matchedKeywordsCount = 0
         var totalKeywords = 0
         val questionReviews = mutableListOf<QuestionReview>()
 
-        currentSessionQuestions.forEachIndexed { idx, question ->
-            val userAns = userMessages.getOrNull(idx)?.text ?: ""
+        finalPairs.forEach { (question, userAns) ->
             val userAnsLower = userAns.lowercase()
             val keywords = if (isEn) question.keywordsEn else question.keywordsRo
             totalKeywords += keywords.size

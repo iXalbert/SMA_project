@@ -1,10 +1,7 @@
 package com.example.interviewtrainer.ui.chat
 
 import android.Manifest
-import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
-import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -40,8 +38,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.interviewtrainer.data.model.MessageRole
 import com.example.interviewtrainer.utils.BodyLanguageAnalyzer
+import com.example.interviewtrainer.utils.HandsFreeVoiceManager
 import com.example.interviewtrainer.utils.LiveVideoMetrics
-import com.example.interviewtrainer.utils.VoiceHelper
+import com.example.interviewtrainer.utils.VoiceConfidenceMetrics
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
 import java.util.concurrent.Executors
 
@@ -63,21 +62,35 @@ fun VideoCallScreen(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        )
+    }
 
     var liveMetrics by remember { mutableStateOf(LiveVideoMetrics()) }
+    var lastVoiceMetrics by remember { mutableStateOf<VoiceConfidenceMetrics?>(null) }
     var showQuickTextInput by remember { mutableStateOf(false) }
+    var showWhiteboard by remember { mutableStateOf(false) }
     var draftAnswer by remember { mutableStateOf("") }
+    var livePartialSpeech by remember { mutableStateOf("") }
     var isAmaliaSpeaking by remember { mutableStateOf(false) }
+    var isHandsFreeListening by remember { mutableStateOf(false) }
+    var handsFreeActive by remember { mutableStateOf(true) }
 
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
+    val permissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { perms ->
+        hasCameraPermission = perms[Manifest.permission.CAMERA] ?: hasCameraPermission
+        hasAudioPermission = perms[Manifest.permission.RECORD_AUDIO] ?: hasAudioPermission
     }
 
     LaunchedEffect(Unit) {
-        if (!hasCameraPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        val needed = mutableListOf<String>()
+        if (!hasCameraPermission) needed.add(Manifest.permission.CAMERA)
+        if (!hasAudioPermission) needed.add(Manifest.permission.RECORD_AUDIO)
+        if (needed.isNotEmpty()) {
+            permissionsLauncher.launch(needed.toTypedArray())
         }
     }
 
@@ -88,25 +101,32 @@ fun VideoCallScreen(
     }
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
 
-    val voiceHelper = remember {
-        VoiceHelper(context) {}
+    val handsFreeManager = remember {
+        HandsFreeVoiceManager(
+            context = context,
+            onSpeakingStateChanged = { speaking -> isAmaliaSpeaking = speaking },
+            onListeningStateChanged = { listening ->
+                isHandsFreeListening = listening
+                if (!listening) livePartialSpeech = ""
+            },
+            onPartialResult = { partial -> livePartialSpeech = partial },
+            onFinalSpeechResult = { finalSpoken, vocalMetrics ->
+                livePartialSpeech = ""
+                lastVoiceMetrics = vocalMetrics
+                viewModel.recordVoiceMetrics(vocalMetrics)
+                viewModel.sendMessage(finalSpoken)
+            },
+            onError = { _ -> }
+        )
     }
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val matches = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spoken = matches?.firstOrNull().orEmpty().trim()
-            if (spoken.isNotBlank()) {
-                viewModel.sendMessage(spoken)
-            }
-        }
+    LaunchedEffect(handsFreeActive) {
+        handsFreeManager.isHandsFreeEnabled = handsFreeActive
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            voiceHelper.shutdown()
+            handsFreeManager.shutdown()
             videoAnalyzer.close()
             analysisExecutor.shutdown()
         }
@@ -117,14 +137,14 @@ fun VideoCallScreen(
 
     LaunchedEffect(lastInterviewerMessage?.text) {
         lastInterviewerMessage?.text?.let { text ->
-            voiceHelper.speak(text, config.language)
+            handsFreeManager.speak(text, config.language)
         }
     }
 
     val infiniteTransition = rememberInfiniteTransition(label = "amaliaPulse")
     val avatarScale by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isAmaliaSpeaking) 1.12f else 1f,
+        targetValue = if (isAmaliaSpeaking || isHandsFreeListening) 1.12f else 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(600, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -237,12 +257,29 @@ fun VideoCallScreen(
                         }
 
                         Column {
-                            Text(
-                                text = "Amalia",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Amalia",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (handsFreeActive) Color(0xFF16A34A) else Color(0xFF475569)
+                                ) {
+                                    Text(
+                                        text = if (handsFreeActive) "HANDS-FREE" else "MANUAL",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
                             Text(
                                 text = "$interviewerStyle • ${config.role}",
                                 color = Color(0xFFCBD5E1),
@@ -251,16 +288,34 @@ fun VideoCallScreen(
                         }
                     }
 
-                    IconButton(
-                        onClick = {
-                            lastInterviewerMessage?.text?.let { voiceHelper.speak(it, config.language) }
+                    Row {
+                        IconButton(
+                            onClick = {
+                                handsFreeActive = !handsFreeActive
+                                Toast.makeText(
+                                    context,
+                                    if (handsFreeActive) "Hands-Free Auto-Listen ACTIV" else "Mod Manual ACTIV",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (handsFreeActive) Icons.Default.Hearing else Icons.Default.HearingDisabled,
+                                contentDescription = "Comută Hands-Free",
+                                tint = if (handsFreeActive) Color(0xFF4ADE80) else Color.LightGray
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VolumeUp,
-                            contentDescription = "Repetă întrebarea",
-                            tint = Color.White
-                        )
+                        IconButton(
+                            onClick = {
+                                lastInterviewerMessage?.text?.let { handsFreeManager.speak(it, config.language) }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = "Repetă întrebarea",
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
             }
@@ -323,28 +378,68 @@ fun VideoCallScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = Color.Black.copy(alpha = 0.72f),
-                border = BorderStroke(1.5.dp, statusBadgeColor)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+            if (isHandsFreeListening || livePartialSpeech.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF1D4ED8).copy(alpha = 0.85f),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(statusBadgeColor)
-                    )
                     Text(
-                        text = if (isEn) liveMetrics.statusLabelEn else liveMetrics.statusLabelRo,
+                        text = if (livePartialSpeech.isNotBlank()) "🎙 $livePartialSpeech..."
+                        else if (isEn) "🎙 Listening automatically... Speak now"
+                        else "🎙 Te ascult automat... Vorbește acum",
                         color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontSize = 12.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.72f),
+                    border = BorderStroke(1.5.dp, statusBadgeColor)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(statusBadgeColor)
+                        )
+                        Text(
+                            text = if (isEn) liveMetrics.statusLabelEn else liveMetrics.statusLabelRo,
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                lastVoiceMetrics?.let { vm ->
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.Black.copy(alpha = 0.72f),
+                        border = BorderStroke(1.dp, Color(0xFF38BDF8))
+                    ) {
+                        Text(
+                            text = if (isEn) "Voice: ${vm.confidenceScore}%" else "Voce: ${vm.confidenceScore}%",
+                            color = Color(0xFF7DD3FC),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
             }
 
@@ -404,22 +499,30 @@ fun VideoCallScreen(
                     Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu")
                 }
 
+                FilledTonalIconButton(
+                    onClick = {
+                        handsFreeManager.stopListening()
+                        showWhiteboard = true
+                    },
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color.White.copy(alpha = 0.18f),
+                        contentColor = Color(0xFF93C5FD)
+                    ),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(Icons.Default.Code, contentDescription = "Whiteboard Cod")
+                }
+
                 FilledIconButton(
                     onClick = {
-                        try {
-                            val intent = voiceHelper.createSpeechIntent(config.language)
-                            speechLauncher.launch(intent)
-                        } catch (e: ActivityNotFoundException) {
-                            val simulated = if (isEn)
-                                "I would use a HashMap for O(1) lookup and validate edge cases first."
-                            else
-                                "Aș folosi un HashMap pentru căutare în O(1) și aș valida întâi cazurile limită."
-                            viewModel.sendMessage(simulated)
-                            Toast.makeText(context, "Răspuns vocal simulat (Emulator)", Toast.LENGTH_SHORT).show()
+                        if (isHandsFreeListening) {
+                            handsFreeManager.stopListening()
+                        } else {
+                            handsFreeManager.startListening(config.language)
                         }
                     },
                     colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = Color(0xFF2563EB),
+                        containerColor = if (isHandsFreeListening) Color(0xFF16A34A) else Color(0xFF2563EB),
                         contentColor = Color.White
                     ),
                     modifier = Modifier.size(64.dp)
@@ -444,7 +547,7 @@ fun VideoCallScreen(
 
                 FilledIconButton(
                     onClick = {
-                        voiceHelper.shutdown()
+                        handsFreeManager.shutdown()
                         viewModel.setVideoReport(videoAnalyzer.buildSessionReport())
                         viewModel.finishInterview(onFinishSession)
                     },
@@ -461,6 +564,16 @@ fun VideoCallScreen(
                     )
                 }
             }
+        }
+
+        if (showWhiteboard) {
+            CodeScratchpadSheet(
+                isEn = isEn,
+                onDismiss = { showWhiteboard = false },
+                onAttachCodeToAnswer = { codeBlock ->
+                    viewModel.sendMessage(codeBlock)
+                }
+            )
         }
     }
 }

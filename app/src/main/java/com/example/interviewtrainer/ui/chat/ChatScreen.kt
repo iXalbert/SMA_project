@@ -1,20 +1,12 @@
 package com.example.interviewtrainer.ui.chat
 
-import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
-import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,36 +17,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.interviewtrainer.data.model.ChatMessage
 import com.example.interviewtrainer.data.model.MessageRole
-import com.example.interviewtrainer.utils.BodyLanguageAnalyzer
-import com.example.interviewtrainer.utils.LiveVideoMetrics
 import com.example.interviewtrainer.utils.VoiceHelper
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
 import kotlinx.coroutines.delay
-import java.util.concurrent.Executors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +45,6 @@ fun ChatScreen(
     onFinishSession: () -> Unit
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val config by viewModel.config.collectAsState()
@@ -72,31 +53,10 @@ fun ChatScreen(
     val isEn = config.language == "Engleză"
 
     var userText by remember { mutableStateOf("") }
+    var showWhiteboard by remember { mutableStateOf(false) }
     var editingMessageIndex by remember { mutableStateOf<Int?>(null) }
     var editingMessageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-
-    var hasCameraPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-                    PackageManager.PERMISSION_GRANTED
-        )
-    }
-    var isCameraEnabled by remember { mutableStateOf(false) }
-    var liveMetrics by remember { mutableStateOf(LiveVideoMetrics()) }
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
-        if (granted) isCameraEnabled = true
-    }
-
-    val videoAnalyzer = remember {
-        BodyLanguageAnalyzer(context) { metrics ->
-            liveMetrics = metrics
-        }
-    }
 
     var remainingSeconds by remember { mutableIntStateOf(120) }
 
@@ -119,7 +79,6 @@ fun ChatScreen(
     DisposableEffect(Unit) {
         onDispose {
             voiceHelper.shutdown()
-            videoAnalyzer.close()
         }
     }
 
@@ -147,7 +106,6 @@ fun ChatScreen(
     val timerSecs = remainingSeconds % 60
     val timerFormatted = String.format("%02d:%02d", timerMinutes, timerSecs)
     val timerUrgent = remainingSeconds <= 20
-    val cameraActive = hasCameraPermission && isCameraEnabled
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -171,22 +129,6 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            if (!hasCameraPermission) {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            } else {
-                                isCameraEnabled = !isCameraEnabled
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = if (cameraActive) Icons.Default.Videocam else Icons.Default.VideocamOff,
-                            contentDescription = "Analiză Video",
-                            tint = if (cameraActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
                     if (isTimedMode) {
                         Surface(
                             shape = RoundedCornerShape(10.dp),
@@ -217,8 +159,13 @@ fun ChatScreen(
                     FilledTonalButton(
                         onClick = {
                             voiceHelper.shutdown()
-                            viewModel.setVideoReport(videoAnalyzer.buildSessionReport())
-                            viewModel.finishInterview(onFinishSession)
+                            viewModel.setVideoReport(null)
+                            if (userText.isNotBlank()) {
+                                viewModel.sendMessageAndFinish(userText.trim(), onFinishSession)
+                                userText = ""
+                            } else {
+                                viewModel.finishInterview(onFinishSession)
+                            }
                         },
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
@@ -247,76 +194,62 @@ fun ChatScreen(
         ) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            Box(modifier = Modifier.weight(1f)) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    itemsIndexed(messages) { index, message ->
-                        val qData = message.questionData
-                        val isBookmarked = qData != null && bookmarks.any { it.questionId == qData.id }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                itemsIndexed(messages) { index, message ->
+                    val qData = message.questionData
+                    val isBookmarked = qData != null && bookmarks.any { it.questionId == qData.id }
 
-                        ChatBubble(
-                            message = message,
-                            isEn = isEn,
-                            isCameraActive = cameraActive,
-                            isBookmarked = isBookmarked,
-                            onToggleBookmark = if (qData != null) {
-                                { viewModel.toggleBookmark(qData) }
-                            } else null,
-                            onEditUserMessage = if (message.role == MessageRole.USER) {
-                                {
-                                    editingMessageIndex = index
-                                    editingMessageText = message.text
-                                }
-                            } else null
-                        )
-                    }
+                    ChatBubble(
+                        message = message,
+                        isEn = isEn,
+                        isBookmarked = isBookmarked,
+                        onToggleBookmark = if (qData != null) {
+                            { viewModel.toggleBookmark(qData) }
+                        } else null,
+                        onEditUserMessage = if (message.role == MessageRole.USER) {
+                            {
+                                editingMessageIndex = index
+                                editingMessageText = message.text
+                            }
+                        } else null
+                    )
+                }
 
-                    if (isLoading) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp),
-                                contentAlignment = Alignment.CenterStart
+                if (isLoading) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                        Text(
-                                            text = if (isEn) "Interviewer is thinking..." else "Intervievatorul analizează...",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Text(
+                                        text = if (isEn) "Interviewer is thinking..." else "Intervievatorul analizează...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
                     }
-                }
-
-                if (cameraActive) {
-                    CameraPipPreview(
-                        lifecycleOwner = lifecycleOwner,
-                        analyzer = videoAnalyzer,
-                        liveMetrics = liveMetrics,
-                        isEn = isEn,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(12.dp)
-                    )
                 }
             }
 
@@ -330,9 +263,9 @@ fun ChatScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            .padding(horizontal = 10.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         if (!isTimedMode) {
                             FilledTonalIconButton(
@@ -343,10 +276,19 @@ fun ChatScreen(
                                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                 ),
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu", modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.Lightbulb, contentDescription = "Indiciu", modifier = Modifier.size(18.dp))
                             }
+                        }
+
+                        FilledTonalIconButton(
+                            onClick = { showWhiteboard = true },
+                            enabled = !isLoading,
+                            shape = CircleShape,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Icon(Icons.Default.Code, contentDescription = "Whiteboard Cod", modifier = Modifier.size(18.dp))
                         }
 
                         FilledTonalIconButton(
@@ -369,9 +311,9 @@ fun ChatScreen(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                             ),
-                            modifier = Modifier.size(42.dp)
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(Icons.Default.Mic, contentDescription = "Dictare Vocală", modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Mic, contentDescription = "Dictare Vocală", modifier = Modifier.size(18.dp))
                         }
 
                         OutlinedTextField(
@@ -402,6 +344,17 @@ fun ChatScreen(
                     }
                 }
             }
+        }
+
+        if (showWhiteboard) {
+            CodeScratchpadSheet(
+                isEn = isEn,
+                initialCode = userText,
+                onDismiss = { showWhiteboard = false },
+                onAttachCodeToAnswer = { codeBlock ->
+                    userText = codeBlock
+                }
+            )
         }
 
         if (editingMessageIndex != null) {
@@ -445,96 +398,9 @@ fun ChatScreen(
 }
 
 @Composable
-fun CameraPipPreview(
-    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    analyzer: BodyLanguageAnalyzer,
-    liveMetrics: LiveVideoMetrics,
-    isEn: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            analysisExecutor.shutdown()
-        }
-    }
-
-    val badgeColor = when {
-        !liveMetrics.faceDetected || liveMetrics.nervousFaceTouch -> Color(0xFFDC2626)
-        !liveMetrics.eyeContactOk || !liveMetrics.shouldersAligned -> Color(0xFFD97706)
-        else -> Color(0xFF16A34A)
-    }
-
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(2.dp, badgeColor),
-        shadowElevation = 6.dp,
-        modifier = modifier.size(width = 112.dp, height = 152.dp)
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            AndroidView(
-                factory = { ctx ->
-                    val previewView = PreviewView(ctx).apply {
-                        scaleType = PreviewView.ScaleType.FILL_CENTER
-                    }
-                    val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                    cameraProviderFuture.addListener({
-                        try {
-                            val cameraProvider = cameraProviderFuture.get()
-                            val preview = Preview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-                            val imageAnalysis = ImageAnalysis.Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build()
-                                .also {
-                                    it.setAnalyzer(analysisExecutor, analyzer)
-                                }
-
-                            cameraProvider.unbindAll()
-                            cameraProvider.bindToLifecycle(
-                                lifecycleOwner,
-                                CameraSelector.DEFAULT_FRONT_CAMERA,
-                                preview,
-                                imageAnalysis
-                            )
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
-                    }, ContextCompat.getMainExecutor(ctx))
-                    previewView
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(14.dp))
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.65f))
-                    .padding(horizontal = 6.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = if (isEn) liveMetrics.statusLabelEn else liveMetrics.statusLabelRo,
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun ChatBubble(
     message: ChatMessage,
     isEn: Boolean = false,
-    isCameraActive: Boolean = false,
     isBookmarked: Boolean = false,
     onToggleBookmark: (() -> Unit)? = null,
     onEditUserMessage: (() -> Unit)? = null
@@ -567,16 +433,14 @@ fun ChatBubble(
     } else null
 
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(end = if (isCameraActive) 124.dp else 0.dp),
+        modifier = Modifier.fillMaxWidth(),
         contentAlignment = alignment
     ) {
         Surface(
             shape = bubbleShape,
             color = containerColor,
             border = borderStroke,
-            modifier = Modifier.widthIn(max = 285.dp)
+            modifier = Modifier.widthIn(max = 295.dp)
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 if (!isUser && !isHint) {

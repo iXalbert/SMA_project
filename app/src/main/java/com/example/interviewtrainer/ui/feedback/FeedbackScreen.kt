@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.example.interviewtrainer.data.model.QuestionReview
 import com.example.interviewtrainer.viewmodel.InterviewViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FeedbackScreen(
     viewModel: InterviewViewModel,
@@ -102,13 +102,25 @@ fun FeedbackScreen(
     ) { padding ->
         val currentReport = report
         if (currentReport == null) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
+                    .padding(padding)
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 CircularProgressIndicator()
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = if (isEn) "Generating evaluation report..." else "Se generează raportul de evaluare...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                OutlinedButton(onClick = onBackToSetup) {
+                    Text(if (isEn) "Back to Setup" else "Înapoi la configurare")
+                }
             }
         } else {
             val scoreColor = when {
@@ -124,7 +136,6 @@ fun FeedbackScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Card 1: Scor General CtCI
                 item {
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -162,7 +173,76 @@ fun FeedbackScreen(
                     }
                 }
 
-                // Card 2: Speech & Pace Analytics
+                if (currentReport.strengths.isNotEmpty() || currentReport.improvements.isNotEmpty()) {
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                if (currentReport.strengths.isNotEmpty()) {
+                                    Text(
+                                        text = if (isEn) "✓ Strengths" else "✓ Puncte tari",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF16A34A)
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        currentReport.strengths.forEach { kw ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFDCFCE7)
+                                            ) {
+                                                Text(
+                                                    text = kw,
+                                                    color = Color(0xFF166534),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (currentReport.improvements.isNotEmpty()) {
+                                    Text(
+                                        text = if (isEn) "⚡ Areas to Improve" else "⚡ Ce poți îmbunătăți",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFD97706)
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        currentReport.improvements.forEach { kw ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFFEF3C7)
+                                            ) {
+                                                Text(
+                                                    text = kw,
+                                                    color = Color(0xFF92400E),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 analytics?.let { stats ->
                     item {
                         Surface(
@@ -195,7 +275,6 @@ fun FeedbackScreen(
                     }
                 }
 
-                // Card 3: Analiză Vocală (Inflexiune & Încredere)
                 voiceMetrics?.let { vm ->
                     item {
                         Surface(
@@ -237,7 +316,6 @@ fun FeedbackScreen(
                     }
                 }
 
-                // Card 4: Analiză Video Nonverbală (TensorFlow Lite)
                 videoReport?.let { vReport ->
                     item {
                         Surface(

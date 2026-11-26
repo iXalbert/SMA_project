@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
@@ -31,7 +32,8 @@ import java.util.Calendar
 @Composable
 fun SetupScreen(
     viewModel: InterviewViewModel,
-    onStartInterview: () -> Unit
+    onStartInterview: () -> Unit,
+    onOpenCvGenerator: () -> Unit = {}
 ) {
     val rawGistUrl = "https://gist.githubusercontent.com/iXalbert/d6f75eebf201f1efa3b108e514c74061/raw/questions.json"
 
@@ -155,6 +157,31 @@ fun SetupScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                OutlinedButton(
+                    onClick = {
+                        viewModel.updateConfig(
+                            domain = selectedDomain,
+                            specialization = selectedSpecialization,
+                            role = selectedRole,
+                            experienceLevel = selectedLevel,
+                            language = selectedLanguage,
+                            isTimedMode = (selectedMode == sessionModes[1]),
+                            isVideoCallMode = isVideoCallSelected,
+                            interviewerStyle = selectedStyle
+                        )
+                        onOpenCvGenerator()
+                    },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Generează Interviu din CV / Job Description (AI)",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
                 dailyQuestion?.let { dq ->
                     val isEn = selectedLanguage == "Engleză"
                     Surface(
@@ -218,7 +245,6 @@ fun SetupScreen(
                     }
                 }
 
-                // Card 1: Experiență Interviu
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -269,7 +295,7 @@ fun SetupScreen(
                                         textAlign = TextAlign.Center
                                     )
                                     Text(
-                                        text = "Chat & Dictare",
+                                        text = "Chat & Whiteboard",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
@@ -300,13 +326,13 @@ fun SetupScreen(
                                         tint = if (isVideoCallSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
-                                        text = "Apel cu Asistenta AI",
+                                        text = "Apel cu Amalia",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
                                         textAlign = TextAlign.Center
                                     )
                                     Text(
-                                        text = "Video + Voce Live",
+                                        text = "Hands-Free + AI Vision",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = TextAlign.Center
@@ -325,9 +351,9 @@ fun SetupScreen(
                                 )
                                 Text(
                                     text = if (selectedStyle == "Tech Lead")
-                                        "Tech Lead: Cere obligatoriu complexitatea Big O și edge cases + analiză video live."
+                                        "Tech Lead: Cere obligatoriu complexitatea Big O și edge cases + analiză video/vocală live."
                                     else
-                                        "Friendly HR: Conversație naturală cu Amalia + analiză postură și privire.",
+                                        "Friendly HR: Conversație hands-free naturală + analiză postură, privire și încredere vocală.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -336,7 +362,6 @@ fun SetupScreen(
                     }
                 }
 
-                // Card 2: Poziția vizată
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -377,7 +402,6 @@ fun SetupScreen(
                     }
                 }
 
-                // Card 3: Parametri sesiune
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surface,
@@ -464,7 +488,7 @@ fun SetupScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isVideoCallSelected) "Apeleaza AI assistant (Start)" else "Începe Interviul",
+                        text = if (isVideoCallSelected) "Sună-o pe Amalia (Start)" else "Începe Interviul",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
